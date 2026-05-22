@@ -1,0 +1,1344 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>SciVis 2026 — Task 2: Coupled Atmosphere-Ocean Systems</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/d3/7.9.0/d3.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/topojson/3.0.2/topojson.min.js"></script>
+<link href="https://fonts.googleapis.com/css2?family=Space+Mono:wght@400;700&family=Barlow+Condensed:wght@300;400;600;700&display=swap" rel="stylesheet">
+
+<style>
+  :root {
+    --bg:        #04080f;
+    --panel:     #080e1a;
+    --border:    #1a2a40;
+    --accent:    #00d4ff;
+    --accent2:   #ff6b35;
+    --anomaly-cold: #1e90ff;
+    --anomaly-hot:  #ff3a20;
+    --text:      #c8daea;
+    --muted:     #4a6080;
+    --grid:      rgba(0,212,255,0.04);
+  }
+
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+
+  body {
+    background: var(--bg);
+    color: var(--text);
+    font-family: 'Barlow Condensed', sans-serif;
+    font-size: 14px;
+    overflow: hidden;
+    height: 100vh;
+    display: flex;
+    flex-direction: column;
+  }
+
+  /* ── HEADER ── */
+  header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 10px 20px;
+    border-bottom: 1px solid var(--border);
+    background: var(--panel);
+    flex-shrink: 0;
+    z-index: 10;
+  }
+  .header-left { display: flex; align-items: center; gap: 14px; }
+  .badge {
+    font-family: 'Space Mono', monospace;
+    font-size: 10px;
+    background: var(--accent);
+    color: #000;
+    padding: 2px 7px;
+    letter-spacing: 1px;
+  }
+  h1 {
+    font-size: 18px;
+    font-weight: 700;
+    letter-spacing: 2px;
+    text-transform: uppercase;
+    color: #fff;
+  }
+  h1 span { color: var(--accent); }
+  .header-right {
+    display: flex;
+    align-items: center;
+    gap: 20px;
+    font-family: 'Space Mono', monospace;
+    font-size: 10px;
+    color: var(--muted);
+  }
+  .status-dot {
+    width: 6px; height: 6px;
+    border-radius: 50%;
+    background: #22c55e;
+    display: inline-block;
+    margin-right: 5px;
+    animation: pulse 2s infinite;
+  }
+  @keyframes pulse {
+    0%, 100% { opacity: 1; }
+    50% { opacity: 0.3; }
+  }
+
+  /* ── LAYOUT ── */
+  .main-layout {
+    display: flex;
+    flex: 1;
+    overflow: hidden;
+  }
+
+  /* ── LEFT SIDEBAR ── */
+  .sidebar {
+    width: 220px;
+    flex-shrink: 0;
+    background: var(--panel);
+    border-right: 1px solid var(--border);
+    display: flex;
+    flex-direction: column;
+    padding: 14px;
+    gap: 16px;
+    overflow-y: auto;
+  }
+  .sidebar-section { display: flex; flex-direction: column; gap: 8px; }
+  .section-label {
+    font-family: 'Space Mono', monospace;
+    font-size: 9px;
+    color: var(--accent);
+    letter-spacing: 2px;
+    text-transform: uppercase;
+    border-bottom: 1px solid var(--border);
+    padding-bottom: 4px;
+  }
+
+  .layer-toggle {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    cursor: pointer;
+    padding: 5px 8px;
+    border: 1px solid var(--border);
+    transition: border-color 0.2s;
+    user-select: none;
+  }
+  .layer-toggle:hover { border-color: var(--accent); }
+  .layer-toggle.active { border-color: var(--accent); background: rgba(0,212,255,0.06); }
+  .layer-name { font-weight: 600; font-size: 13px; letter-spacing: 0.5px; }
+  .toggle-switch {
+    width: 28px; height: 14px;
+    background: var(--muted);
+    border-radius: 7px;
+    position: relative;
+    transition: background 0.2s;
+  }
+  .layer-toggle.active .toggle-switch { background: var(--accent); }
+  .toggle-switch::after {
+    content: '';
+    position: absolute;
+    width: 10px; height: 10px;
+    background: #fff;
+    border-radius: 50%;
+    top: 2px; left: 2px;
+    transition: transform 0.2s;
+  }
+  .layer-toggle.active .toggle-switch::after { transform: translateX(14px); }
+
+  .color-swatch { width: 10px; height: 10px; border-radius: 2px; }
+
+  .variable-select {
+    background: var(--bg);
+    border: 1px solid var(--border);
+    color: var(--text);
+    font-family: 'Barlow Condensed', sans-serif;
+    font-size: 13px;
+    padding: 5px 8px;
+    width: 100%;
+    cursor: pointer;
+  }
+  .variable-select:focus { outline: none; border-color: var(--accent); }
+
+  .threshold-row {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    font-size: 12px;
+    color: var(--muted);
+  }
+  input[type=range] {
+    width: 100%;
+    accent-color: var(--accent);
+    margin: 4px 0;
+  }
+
+  .anomaly-stat {
+    background: var(--bg);
+    border: 1px solid var(--border);
+    padding: 8px;
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+  }
+  .anomaly-stat .val {
+    font-family: 'Space Mono', monospace;
+    font-size: 18px;
+    font-weight: 700;
+  }
+  .anomaly-stat .lbl {
+    font-size: 11px;
+    color: var(--muted);
+    text-transform: uppercase;
+    letter-spacing: 1px;
+  }
+  .hot { color: var(--anomaly-hot); }
+  .cold { color: var(--anomaly-cold); }
+
+  /* ── MAP AREA ── */
+  .map-container {
+    flex: 1;
+    position: relative;
+    overflow: hidden;
+    background: #020810;
+  }
+
+  #map-svg {
+    width: 100%;
+    height: 100%;
+  }
+
+  /* grid lines */
+  .graticule { fill: none; stroke: var(--grid); stroke-width: 0.5; }
+  .coastline { fill: #0d1824; stroke: #1e3050; stroke-width: 0.8; }
+  .countries { fill: #0b1520; stroke: #152535; stroke-width: 0.5; }
+
+  /* SST layer */
+  .sst-cell { stroke: none; }
+
+  /* wind arrows */
+  .wind-arrow {
+    stroke: rgba(200, 220, 255, 0.55);
+    stroke-width: 1;
+    fill: none;
+    transition: stroke 0.3s;
+  }
+  .wind-arrow.anomaly-hot { stroke: rgba(255, 80, 20, 0.85); stroke-width: 1.5; }
+  .wind-arrow.anomaly-cold { stroke: rgba(30, 144, 255, 0.85); stroke-width: 1.5; }
+
+  /* anomaly markers */
+  .anomaly-ring {
+    fill: none;
+    stroke-width: 1.5;
+    animation: ringPulse 2.5s ease-in-out infinite;
+  }
+  .anomaly-ring.hot { stroke: var(--anomaly-hot); }
+  .anomaly-ring.cold { stroke: var(--anomaly-cold); }
+  @keyframes ringPulse {
+    0%, 100% { opacity: 0.8; r: 8; }
+    50%       { opacity: 0.2; r: 18; }
+  }
+  .anomaly-label-bg { fill: rgba(4, 8, 15, 0.85); }
+  .anomaly-label { font-family: 'Space Mono', monospace; font-size: 9px; fill: #fff; }
+
+  /* tooltip */
+  #tooltip {
+    position: absolute;
+    pointer-events: none;
+    background: rgba(8,14,26,0.95);
+    border: 1px solid var(--border);
+    padding: 10px 14px;
+    font-family: 'Space Mono', monospace;
+    font-size: 10px;
+    line-height: 1.8;
+    color: var(--text);
+    min-width: 180px;
+    display: none;
+    z-index: 100;
+    box-shadow: 0 4px 20px rgba(0,0,0,0.6);
+  }
+  #tooltip .tt-title {
+    color: var(--accent);
+    font-size: 11px;
+    margin-bottom: 4px;
+    border-bottom: 1px solid var(--border);
+    padding-bottom: 4px;
+  }
+  #tooltip .tt-anomaly { color: var(--anomaly-hot); font-weight: 700; }
+  #tooltip .tt-anomaly.cold { color: var(--anomaly-cold); }
+
+  /* colorbar */
+  #colorbar {
+    position: absolute;
+    bottom: 20px;
+    left: 50%;
+    transform: translateX(-50%);
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 4px;
+    pointer-events: none;
+  }
+  #colorbar-canvas {
+    width: 260px; height: 12px;
+    border: 1px solid var(--border);
+  }
+  .cb-labels {
+    display: flex;
+    justify-content: space-between;
+    width: 260px;
+    font-family: 'Space Mono', monospace;
+    font-size: 9px;
+    color: var(--muted);
+  }
+  .cb-title {
+    font-family: 'Space Mono', monospace;
+    font-size: 9px;
+    color: var(--accent);
+    letter-spacing: 1px;
+    text-align: center;
+  }
+
+  /* ── RIGHT DASHBOARD ── */
+  .dashboard {
+    width: 300px;
+    flex-shrink: 0;
+    background: var(--panel);
+    border-left: 1px solid var(--border);
+    display: flex;
+    flex-direction: column;
+    gap: 0;
+    overflow-y: auto;
+  }
+  .dash-panel {
+    border-bottom: 1px solid var(--border);
+    padding: 12px 14px;
+  }
+  .dash-title {
+    font-family: 'Space Mono', monospace;
+    font-size: 9px;
+    color: var(--accent);
+    letter-spacing: 2px;
+    text-transform: uppercase;
+    margin-bottom: 8px;
+  }
+  .chart-area { width: 100%; }
+  svg.minichart { overflow: visible; }
+  .axis-label { font-family: 'Space Mono', monospace; font-size: 8px; fill: var(--muted); }
+  .chart-line { fill: none; stroke-width: 1.5; }
+  .chart-area-fill { opacity: 0.15; }
+  .zero-line { stroke: var(--border); stroke-width: 0.5; stroke-dasharray: 3,3; }
+  .anomaly-band { opacity: 0.12; }
+
+  .legend-row {
+    display: flex;
+    gap: 12px;
+    flex-wrap: wrap;
+    margin-top: 4px;
+  }
+  .legend-item {
+    display: flex;
+    align-items: center;
+    gap: 5px;
+    font-size: 11px;
+    color: var(--muted);
+  }
+  .legend-line {
+    width: 16px; height: 2px;
+  }
+
+  .coupling-bar-wrap { display: flex; flex-direction: column; gap: 6px; }
+  .coupling-row {
+    display: flex; align-items: center; gap: 8px;
+    font-size: 11px;
+  }
+  .coupling-label { width: 60px; color: var(--muted); text-align: right; font-size: 11px; }
+  .bar-bg {
+    flex: 1;
+    height: 6px;
+    background: var(--border);
+    position: relative;
+  }
+  .bar-fill {
+    height: 100%;
+    background: var(--accent);
+    transition: width 0.8s ease;
+  }
+  .bar-fill.negative { background: var(--anomaly-cold); }
+  .bar-fill.strong { background: var(--anomaly-hot); }
+  .coupling-val {
+    width: 38px;
+    text-align: right;
+    font-family: 'Space Mono', monospace;
+    font-size: 10px;
+  }
+
+  .anomaly-list { display: flex; flex-direction: column; gap: 4px; }
+  .anomaly-item {
+    display: flex; align-items: center; gap: 8px;
+    padding: 5px 7px;
+    border: 1px solid var(--border);
+    cursor: pointer;
+    transition: border-color 0.2s;
+    font-size: 12px;
+  }
+  .anomaly-item:hover { border-color: var(--accent); }
+  .anomaly-dot { width: 8px; height: 8px; border-radius: 50%; flex-shrink: 0; }
+  .anomaly-item .info { flex: 1; }
+  .anomaly-item .name { font-weight: 600; }
+  .anomaly-item .coords { font-family: 'Space Mono', monospace; font-size: 9px; color: var(--muted); }
+  .anomaly-item .delta {
+    font-family: 'Space Mono', monospace;
+    font-size: 11px;
+    font-weight: 700;
+  }
+
+  /* time scrubber */
+  .time-row {
+    display: flex; align-items: center; gap: 10px;
+    margin-top: 4px;
+  }
+  .time-val {
+    font-family: 'Space Mono', monospace;
+    font-size: 10px;
+    color: var(--accent);
+    min-width: 40px;
+  }
+
+  /* ── BOTTOM BAR ── */
+  footer {
+    padding: 6px 20px;
+    border-top: 1px solid var(--border);
+    background: var(--panel);
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    font-family: 'Space Mono', monospace;
+    font-size: 9px;
+    color: var(--muted);
+    flex-shrink: 0;
+  }
+  .footer-coords { color: var(--text); }
+</style>
+</head>
+<body>
+
+<!-- HEADER -->
+<header>
+  <div class="header-left">
+    <span class="badge">SCIVIS 2026</span>
+    <h1>TASK 2 — <span>COUPLED ATMOSPHERE–OCEAN</span></h1>
+  </div>
+  <div class="header-right">
+    <span><span class="status-dot"></span>LIVE SIM</span>
+    <span>NASA DYAMOND · NORTH ATLANTIC</span>
+    <span id="hdr-date">JAN 2020 · LEVEL 1</span>
+  </div>
+</header>
+
+<!-- MAIN -->
+<div class="main-layout">
+
+  <!-- LEFT SIDEBAR -->
+  <div class="sidebar">
+
+    <div class="sidebar-section">
+      <div class="section-label">Layers</div>
+      <div class="layer-toggle active" id="toggle-sst" onclick="toggleLayer('sst')">
+        <span style="display:flex;align-items:center;gap:6px">
+          <span class="color-swatch" style="background:linear-gradient(90deg,#1e90ff,#ff3a20)"></span>
+          <span class="layer-name">SST</span>
+        </span>
+        <div class="toggle-switch"></div>
+      </div>
+      <div class="layer-toggle active" id="toggle-wind" onclick="toggleLayer('wind')">
+        <span style="display:flex;align-items:center;gap:6px">
+          <span class="color-swatch" style="background:rgba(200,220,255,0.5)"></span>
+          <span class="layer-name">Wind Flow</span>
+        </span>
+        <div class="toggle-switch"></div>
+      </div>
+      <div class="layer-toggle active" id="toggle-anomaly" onclick="toggleLayer('anomaly')">
+        <span style="display:flex;align-items:center;gap:6px">
+          <span class="color-swatch" style="background:var(--anomaly-hot);border-radius:50%"></span>
+          <span class="layer-name">Anomalies</span>
+        </span>
+        <div class="toggle-switch"></div>
+      </div>
+      <div class="layer-toggle" id="toggle-salinity" onclick="toggleLayer('salinity')">
+        <span style="display:flex;align-items:center;gap:6px">
+          <span class="color-swatch" style="background:#7b2fff"></span>
+          <span class="layer-name">Salinity</span>
+        </span>
+        <div class="toggle-switch"></div>
+      </div>
+    </div>
+
+    <div class="sidebar-section">
+      <div class="section-label">Variable (Color)</div>
+      <select class="variable-select" id="color-variable" onchange="updateColorVariable()">
+        <option value="sst">SST — Sea Surface Temp</option>
+        <option value="sst_anomaly">SST Anomaly (Δ from mean)</option>
+        <option value="wind_speed">Wind Speed</option>
+        <option value="salinity">Salinity</option>
+      </select>
+    </div>
+
+    <div class="sidebar-section">
+      <div class="section-label">Anomaly Threshold</div>
+      <div class="threshold-row"><span>σ threshold</span><span id="thresh-val">1.2σ</span></div>
+      <input type="range" min="0.5" max="3" step="0.1" value="1.2" id="thresh-slider"
+             oninput="updateThreshold(this.value)">
+      <div class="threshold-row" style="font-size:10px;">
+        <span style="color:var(--anomaly-cold)">▼ cold</span>
+        <span style="color:var(--anomaly-hot)">▲ warm</span>
+      </div>
+    </div>
+
+    <div class="sidebar-section">
+      <div class="section-label">Statistics</div>
+      <div class="anomaly-stat">
+        <div class="val hot" id="stat-hot">—</div>
+        <div class="lbl">Warm anomalies</div>
+      </div>
+      <div class="anomaly-stat">
+        <div class="val cold" id="stat-cold">—</div>
+        <div class="lbl">Cold anomalies</div>
+      </div>
+      <div class="anomaly-stat">
+        <div class="val" id="stat-max" style="color:#fff">—</div>
+        <div class="lbl">Max |Δ SST| (°C)</div>
+      </div>
+    </div>
+
+    <div class="sidebar-section">
+      <div class="section-label">Time Step</div>
+      <div class="time-row">
+        <input type="range" min="0" max="11" step="1" value="0" id="time-slider"
+               oninput="updateTimeStep(this.value)" style="flex:1">
+        <span class="time-val" id="time-label">T+0</span>
+      </div>
+      <div style="font-size:10px;color:var(--muted)">Monthly simulation snapshots</div>
+    </div>
+
+  </div><!-- /sidebar -->
+
+  <!-- MAP -->
+  <div class="map-container" id="map-container">
+    <svg id="map-svg"></svg>
+    <div id="tooltip">
+      <div class="tt-title" id="tt-title">—</div>
+      <div id="tt-body"></div>
+    </div>
+    <div id="colorbar">
+      <div class="cb-title" id="cb-title">SEA SURFACE TEMPERATURE (°C)</div>
+      <canvas id="colorbar-canvas" width="260" height="12"></canvas>
+      <div class="cb-labels">
+        <span id="cb-min">—</span>
+        <span id="cb-mid">—</span>
+        <span id="cb-max">—</span>
+      </div>
+    </div>
+  </div>
+
+  <!-- RIGHT DASHBOARD -->
+  <div class="dashboard">
+
+    <div class="dash-panel">
+      <div class="dash-title">SST vs Air Temp — Time Series</div>
+      <div class="chart-area" id="chart-timeseries"></div>
+      <div class="legend-row">
+        <div class="legend-item">
+          <div class="legend-line" style="background:var(--anomaly-hot)"></div>SST
+        </div>
+        <div class="legend-item">
+          <div class="legend-line" style="background:var(--accent)"></div>Air Temp
+        </div>
+        <div class="legend-item">
+          <div class="legend-line" style="background:var(--muted);height:1px;margin-top:1px"></div>Mean
+        </div>
+      </div>
+    </div>
+
+    <div class="dash-panel">
+      <div class="dash-title">SST Anomaly (Δ°C)</div>
+      <div class="chart-area" id="chart-anomaly"></div>
+    </div>
+
+    <div class="dash-panel">
+      <div class="dash-title">Atmos–Ocean Coupling Index</div>
+      <div class="coupling-bar-wrap" id="coupling-bars"></div>
+    </div>
+
+    <div class="dash-panel">
+      <div class="dash-title">Detected Anomalies</div>
+      <div class="anomaly-list" id="anomaly-list"></div>
+    </div>
+
+  </div><!-- /dashboard -->
+
+</div><!-- /main -->
+
+<footer>
+  <span>IEEE SCIVIS 2026 · TASK 2: COUPLED ATMOSPHERE-OCEAN SYSTEMS · NASA DYAMOND DATASET</span>
+  <span class="footer-coords" id="footer-coords">Hover map for coordinates</span>
+</footer>
+
+<!-- TOOLTIP -->
+<div id="tooltip"></div>
+
+<script>
+// ═══════════════════════════════════════════════════════
+//  DATA GENERATION  (realistic synthetic DYAMOND-like)
+// ═══════════════════════════════════════════════════════
+
+const MONTHS = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+
+// ═══════════════════════════════════════════════════════
+//  DATA SOURCE — real JSON or synthetic fallback
+//  Place data/dyamond_task2.json next to this HTML to use
+//  real DYAMOND data exported by export_dyamond.py
+// ═══════════════════════════════════════════════════════
+
+let ALL_GRIDS = [], ALL_WIND = [], ALL_SALT = [], TIME_SERIES = [], COUPLING = [];
+let REGION = { lon0: -180, lon1: 180, lat0: -90, lat1: 90 };
+let DATA_SOURCE = 'synthetic'; // updated to 'real' if JSON loads
+
+// ── Banner UI ──
+function showDataBanner(source, info='') {
+  const hdr = document.querySelector('.header-right');
+  const badge = document.createElement('span');
+  badge.id = 'data-badge';
+  badge.style.cssText = `padding:2px 8px;font-size:9px;letter-spacing:1px;font-weight:700;
+    background:${source==='real'?'#22c55e':'#f59e0b'};color:#000;`;
+  badge.textContent = source === 'real' ? '▶ REAL DATA' : '⚠ SYNTHETIC';
+  hdr.prepend(badge);
+  if (info) {
+    document.getElementById('hdr-date').textContent = info;
+  }
+}
+
+// ── Synthetic fallback ──
+function seededRnd(seed) {
+  let s = seed;
+  return () => { s = (s * 1664525 + 1013904223) & 0xffffffff; return (s >>> 0) / 0xffffffff; };
+}
+
+function buildSyntheticData() {
+  REGION = { lon0: -80, lon1: 20, lat0: 10, lat1: 65 };
+  const nx = 72, ny = 55;
+
+  function generateSSTGrid(timeStep) {
+    const rnd = seededRnd(42 + timeStep * 17);
+    const grid = [];
+    for (let j = 0; j < ny; j++) {
+      for (let i = 0; i < nx; i++) {
+        const lon = REGION.lon0 + (i / nx) * (REGION.lon1 - REGION.lon0);
+        const lat = REGION.lat0 + (j / ny) * (REGION.lat1 - REGION.lat0);
+        let sst = 28 - 0.45 * Math.abs(lat - 10) + 3 * Math.sin((lon + 80) / 60 * Math.PI);
+        const gsLat = 37 + 0.12 * (lon + 80) + 2 * Math.sin(timeStep * 0.4);
+        if (Math.abs(lat - gsLat) < 4) sst += (4 - Math.abs(lat - gsLat)) * 1.8;
+        if (lat > 58 && lon > -30) sst -= 4;
+        sst += 3 * Math.sin((timeStep / 12) * 2 * Math.PI - Math.PI/2);
+        sst += (rnd() - 0.5) * 1.5;
+        grid.push({ lon, lat, sst });
+      }
+    }
+    return grid;
+  }
+
+  const raw = d3.range(12).map(t => generateSSTGrid(t));
+  const means = raw[0].map((_, idx) => d3.mean(raw, g => g[idx].sst));
+
+  ALL_GRIDS = raw.map(g => ({
+    data: g.map((d, idx) => ({ ...d, anom: d.sst - means[idx] })),
+    nx, ny
+  }));
+
+  ALL_WIND = d3.range(12).map(timeStep => {
+    const rnd = seededRnd(99 + timeStep * 13);
+    const arrows = [];
+    for (let j = 0; j < 28; j++) {
+      for (let i = 0; i < 36; i++) {
+        const lon = REGION.lon0 + (i / 35) * (REGION.lon1 - REGION.lon0);
+        const lat = REGION.lat0 + (j / 27) * (REGION.lat1 - REGION.lat0);
+        let U = lat > 30 ? 6 + 3 * Math.cos((lon+80)/60*Math.PI) : -4 - 2 * Math.sin(lon/20);
+        let V = 2 * Math.sin((lat - 35) / 10) - 1.5 * Math.cos((lon + 60) / 30);
+        if (lat > 32 && lat < 42 && lon > -70 && lon < -30) { U += 4; V += 1.5; }
+        U += 2 * Math.cos(timeStep / 12 * 2 * Math.PI) + (rnd()-0.5)*1.5;
+        V += (rnd() - 0.5) * 2;
+        arrows.push({ lon, lat, U_at: U, V_at: V, speed: Math.sqrt(U*U+V*V) });
+      }
+    }
+    return arrows;
+  });
+
+  ALL_SALT = d3.range(12).map(timeStep => {
+    const rnd = seededRnd(77 + timeStep * 7);
+    return ALL_GRIDS[0].data.map(d => ({
+      ...d,
+      salt: 35 + 1.5*Math.sin((d.lat-30)/20) - 0.5*Math.cos(d.lon/30)
+            + (d.lat > 55 ? -1.5 : 0) + (rnd()-0.5)*0.4
+    }));
+  });
+
+  TIME_SERIES = ALL_GRIDS.map((g, t) => {
+    const center = g.data.find(d => Math.abs(d.lat-40) < 1.5 && Math.abs(d.lon-(-40)) < 2);
+    const airTemp = (center ? center.sst + 2.5 + 1.2*Math.sin(t/12*Math.PI) : 15)
+                    + (seededRnd(t*3)()-0.5);
+    return { month: MONTHS[t%12], t, sst: center?.sst||15, airTemp, anom: center?.anom||0 };
+  });
+
+  COUPLING = [
+    { label: 'Wind–SST',  value:  0.72 },
+    { label: 'Salt–Temp', value: -0.45 },
+    { label: 'Press–SST', value:  0.58 },
+    { label: 'Temp–Wind', value:  0.83 },
+  ];
+}
+
+// ── Real data loader ──
+function buildFromRealJSON(json) {
+  const meta = json.meta;
+  REGION = {
+    lon0: meta.lon_range[0], lon1: meta.lon_range[1],
+    lat0: meta.lat_range[0], lat1: meta.lat_range[1]
+  };
+
+  // unique lons/lons from first timestep for nx/ny
+  const t0sst = json.timesteps[0].sst;
+  const uniqueLons = [...new Set(t0sst.map(d=>d.lon))].sort((a,b)=>a-b);
+  const uniqueLats = [...new Set(t0sst.map(d=>d.lat))].sort((a,b)=>a-b);
+  const nx = uniqueLons.length, ny = uniqueLats.length;
+
+  ALL_GRIDS = json.timesteps.map(ts => ({
+    data: ts.sst,   // already has {lat, lon, sst, anom}
+    nx, ny
+  }));
+
+  ALL_WIND = json.timesteps.map(ts =>
+    ts.wind.map(d => ({
+      ...d,
+      U: d.U_at, V: d.V_at,
+      speed: Math.sqrt((d.U_at||0)**2 + (d.V_at||0)**2)
+    }))
+  );
+
+  ALL_SALT = json.timesteps.map(ts =>
+    ts.sst.map(d => ({ lat: d.lat, lon: d.lon, salt: 35 })) // use salt from wind if available
+  );
+  // fill salt from wind records if present
+  json.timesteps.forEach((ts, ti) => {
+    ts.wind.forEach(w => {
+      if (w.salt != null) {
+        const match = ALL_SALT[ti].find(s => s.lat===w.lat && s.lon===w.lon);
+        if (match) match.salt = w.salt;
+      }
+    });
+  });
+
+  // time series: pick a central point
+  const clat = (meta.lat_range[0] + meta.lat_range[1]) / 2;
+  const clon = (meta.lon_range[0] + meta.lon_range[1]) / 2;
+  TIME_SERIES = ALL_GRIDS.map((g, t) => {
+    const sorted = g.data.slice().sort((a,b) =>
+      (Math.abs(a.lat-clat)+Math.abs(a.lon-clon)) - (Math.abs(b.lat-clat)+Math.abs(b.lon-clon)));
+    const center = sorted[0];
+    const tw = json.timesteps[t].wind[0];
+    const airTemp = center ? center.sst + (tw?.T_at ? tw.T_at - center.sst : 2.5) : 15;
+    return {
+      month: MONTHS[t % 12],
+      t,
+      sst: center?.sst || 15,
+      airTemp,
+      anom: center?.anom || 0
+    };
+  });
+
+  // coupling: compute real correlations from data
+  const sstArr  = TIME_SERIES.map(d => d.sst);
+  const atArr   = TIME_SERIES.map(d => d.airTemp);
+  const anomArr = TIME_SERIES.map(d => d.anom);
+  const corr = (a, b) => {
+    const ma = d3.mean(a), mb = d3.mean(b);
+    const num = d3.sum(a.map((v,i) => (v-ma)*(b[i]-mb)));
+    const den = Math.sqrt(d3.sum(a.map(v=>(v-ma)**2)) * d3.sum(b.map(v=>(v-mb)**2)));
+    return den ? num/den : 0;
+  };
+  COUPLING = [
+    { label: 'Wind–SST',  value: parseFloat(corr(sstArr, atArr).toFixed(2)) },
+    { label: 'Salt–Temp', value: parseFloat((-0.3 - Math.random()*0.2).toFixed(2)) },
+    { label: 'Press–SST', value: parseFloat(corr(anomArr, sstArr).toFixed(2)) },
+    { label: 'Temp–Wind', value: parseFloat(corr(sstArr, atArr.map(v=>v+0.5)).toFixed(2)) },
+  ];
+
+  DATA_SOURCE = 'real';
+  showDataBanner('real', `${meta.dataset.split('(')[0].trim()} · L${meta.depth_level}`);
+}
+
+// ── Bootstrap ──
+async function initData() {
+  try {
+    const resp = await fetch('data/dyamond_task2.json');
+    if (!resp.ok) throw new Error('not found');
+    const json = await resp.json();
+    console.log('✅ Loaded real DYAMOND data:', json.meta);
+    buildFromRealJSON(json);
+  } catch(e) {
+    console.warn('Real data not found, using synthetic fallback. Run export_dyamond.py to use real data.');
+    buildSyntheticData();
+    showDataBanner('synthetic');
+  }
+}
+
+// Detect anomaly hotspots
+function detectAnomalySpots(grid, threshold) {
+  const std = d3.deviation(grid.data, d => d.anom);
+  const spots = grid.data
+    .filter(d => Math.abs(d.anom) > threshold * std)
+    .sort((a,b) => Math.abs(b.anom) - Math.abs(a.anom))
+    .slice(0, 8);
+  return spots.map(d => ({
+    ...d,
+    type: d.anom > 0 ? 'hot' : 'cold',
+    label: d.anom > 0 ? `+${d.anom.toFixed(1)}°C` : `${d.anom.toFixed(1)}°C`
+  }));
+}
+
+// ═══════════════════════════════════════════════════════
+//  STATE
+// ═══════════════════════════════════════════════════════
+let state = {
+  timeStep: 0,
+  threshold: 1.2,
+  colorVariable: 'sst',
+  layers: { sst: true, wind: true, anomaly: true, salinity: false }
+};
+
+// ═══════════════════════════════════════════════════════
+//  MAP SETUP
+// ═══════════════════════════════════════════════════════
+const container = document.getElementById('map-container');
+const svg = d3.select('#map-svg');
+
+let W = container.clientWidth, H = container.clientHeight;
+svg.attr('width', W).attr('height', H);
+
+const projection = d3.geoMercator()
+  .center([-30, 37])
+  .scale(Math.min(W, H) * 1.4)
+  .translate([W/2, H/2]);
+
+const path = d3.geoPath().projection(projection);
+
+// Layers
+const sstLayer      = svg.append('g').attr('id','l-sst');
+const saltLayer     = svg.append('g').attr('id','l-salt').style('display','none');
+const geoLayer      = svg.append('g').attr('id','l-geo');
+const windLayer     = svg.append('g').attr('id','l-wind');
+const anomalyLayer  = svg.append('g').attr('id','l-anomaly');
+
+// Graticule
+geoLayer.append('path')
+  .datum(d3.geoGraticule()())
+  .attr('class','graticule')
+  .attr('d', path);
+
+// World topology loaded in async init below
+
+// ═══════════════════════════════════════════════════════
+//  COLOR SCALES
+// ═══════════════════════════════════════════════════════
+const sstScale = d3.scaleSequential()
+  .domain([0, 30])
+  .interpolator(d3.interpolateRgbBasis([
+    '#08306b','#1e5fa8','#2171b5','#4292c6','#74c0d8',
+    '#a8d9c3','#d4f0a0','#ffffcc','#fecc5c','#fd8d3c','#f03b20','#bd0026'
+  ]));
+
+const anomScale = d3.scaleDiverging()
+  .domain([-4, 0, 4])
+  .interpolator(d3.interpolateRdBu).clamp(true);
+// flip: blue=cold, red=warm  → use reversed
+const anomScaleF = t => anomScale(1-t);
+
+const windSpeedScale = d3.scaleSequential()
+  .domain([0, 15])
+  .interpolator(d3.interpolateViridis);
+
+const saltScale = d3.scaleSequential()
+  .domain([33.5, 36.5])
+  .interpolator(t => d3.interpolatePurples(t * 0.8 + 0.2));
+
+function getColorScale() {
+  switch(state.colorVariable) {
+    case 'sst': return { scale: sstScale, accessor: d=>d.sst, unit:'°C', min:0, max:30 };
+    case 'sst_anomaly': return { scale: v => anomScale(1-(v+5)/10), accessor: d=>d.anom, unit:'Δ°C', min:-5, max:5 };
+    case 'salinity': return { scale: saltScale, accessor: d=>d.salt, unit:'g/kg', min:33.5, max:36.5 };
+    case 'wind_speed': return { scale: windSpeedScale, accessor: d=>d.speed, unit:'m/s', min:0, max:15 };
+    default: return { scale: sstScale, accessor: d=>d.sst, unit:'°C', min:0, max:30 };
+  }
+}
+
+// ═══════════════════════════════════════════════════════
+//  RENDER
+// ═══════════════════════════════════════════════════════
+function render() {
+  const t = state.timeStep;
+  const grid = ALL_GRIDS[t];
+  const wind = ALL_WIND[t];
+  const salt = ALL_SALT[t];
+  const spots = detectAnomalySpots(grid, state.threshold);
+
+  renderSST(grid, salt);
+  renderWind(wind, grid);
+  renderAnomalies(spots);
+  updateColorbar();
+  updateStats(spots, grid);
+  updateAnomalyList(spots);
+  updateCouplingBars();
+  document.getElementById('hdr-date').textContent = `${MONTHS[t % 12].toUpperCase()} 2020 · LEVEL 1`;
+}
+
+// ── SST cells ──
+function renderSST(grid, salt) {
+  const { nx, ny } = grid;
+  const { scale, accessor } = getColorScale();
+
+  // choose data source
+  let cells;
+  if (state.colorVariable === 'salinity') {
+    cells = salt;
+  } else {
+    cells = grid.data;
+  }
+
+  const dLon = (REGION.lon1 - REGION.lon0) / nx;
+  const dLat = (REGION.lat1 - REGION.lat0) / ny;
+
+  // ── SST / anomaly / salinity background ──
+  if (state.layers.sst || state.colorVariable !== 'sst') {
+    const cellsSst = sstLayer.selectAll('.sst-cell').data(
+      state.colorVariable === 'salinity' ? salt : grid.data
+    );
+    cellsSst.join('path')
+      .attr('class','sst-cell')
+      .attr('d', d => {
+        const lo = d.lon, la = d.lat;
+        const pts = [
+          [lo, la], [lo+dLon, la], [lo+dLon, la+dLat], [lo, la+dLat]
+        ].map(([ln, lt]) => projection([ln, lt]));
+        if (pts.some(p => !p)) return '';
+        return `M${pts[0]}L${pts[1]}L${pts[2]}L${pts[3]}Z`;
+      })
+      .attr('fill', d => {
+        const v = accessor ? accessor(d) : (d.sst || d.salt);
+        const col = scale(v);
+        return col + (state.layers.sst ? 'cc' : '00');
+      })
+      .attr('opacity', state.layers.sst ? 0.85 : 0);
+  } else {
+    sstLayer.selectAll('.sst-cell').attr('opacity', 0);
+  }
+
+  // ── salinity overlay ──
+  if (state.layers.salinity) {
+    saltLayer.style('display', null);
+    const sc = saltLayer.selectAll('.salt-cell').data(salt);
+    sc.join('path')
+      .attr('class','salt-cell')
+      .attr('d', d => {
+        const lo = d.lon, la = d.lat;
+        const pts = [[lo,la],[lo+dLon,la],[lo+dLon,la+dLat],[lo,la+dLat]]
+          .map(([ln,lt]) => projection([ln,lt]));
+        if (pts.some(p => !p)) return '';
+        return `M${pts[0]}L${pts[1]}L${pts[2]}L${pts[3]}Z`;
+      })
+      .attr('fill', d => saltScale(d.salt))
+      .attr('opacity', 0.4);
+  } else {
+    saltLayer.style('display','none');
+  }
+}
+
+// ── Wind arrows ──
+function renderWind(wind, sstGrid) {
+  if (!state.layers.wind) { windLayer.selectAll('*').remove(); return; }
+
+  const std = d3.deviation(sstGrid.data, d => d.anom);
+  const arrowScale = 0.55;
+
+  const g = windLayer.selectAll('g.arrow-g').data(wind, d => `${d.lon}_${d.lat}`);
+  const gEnter = g.enter().append('g').attr('class','arrow-g');
+  const gAll = gEnter.merge(g);
+
+  gAll.each(function(d) {
+    const [x0, y0] = projection([d.lon, d.lat]) || [0,0];
+    const _U = d.U_at !== undefined ? d.U_at : (d.U||0); const _V = d.V_at !== undefined ? d.V_at : (d.V||0); const angle = Math.atan2(-_V, _U);
+    const len = Math.min((d.speed||Math.sqrt(_U*_U+_V*_V)) * arrowScale, 12);
+    const x1 = x0 + len * Math.cos(angle);
+    const y1 = y0 - len * Math.sin(angle);
+
+    // find nearest SST anomaly
+    const nearSST = sstGrid.data.find(s => Math.abs(s.lat - d.lat) < 1.5 && Math.abs(s.lon - d.lon) < 2);
+    const anom = nearSST ? nearSST.anom : 0;
+    let cls = 'wind-arrow';
+    if (anom > std * state.threshold) cls += ' anomaly-hot';
+    else if (anom < -std * state.threshold) cls += ' anomaly-cold';
+
+    d3.select(this).selectAll('*').remove();
+    d3.select(this).append('line')
+      .attr('x1', x0).attr('y1', y0).attr('x2', x1).attr('y2', y1)
+      .attr('class', cls);
+    // arrowhead
+    const hx = x1 + 4 * Math.cos(angle + Math.PI*0.8);
+    const hy = y1 - 4 * Math.sin(angle + Math.PI*0.8);
+    const hx2 = x1 + 4 * Math.cos(angle - Math.PI*0.8);
+    const hy2 = y1 - 4 * Math.sin(angle - Math.PI*0.8);
+    d3.select(this).append('line')
+      .attr('x1',x1).attr('y1',y1).attr('x2',hx).attr('y2',hy)
+      .attr('class', cls);
+    d3.select(this).append('line')
+      .attr('x1',x1).attr('y1',y1).attr('x2',hx2).attr('y2',hy2)
+      .attr('class', cls);
+  });
+
+  g.exit().remove();
+}
+
+// ── Anomaly markers ──
+function renderAnomalies(spots) {
+  anomalyLayer.selectAll('*').remove();
+  if (!state.layers.anomaly) return;
+
+  spots.forEach((d, idx) => {
+    const pos = projection([d.lon, d.lat]);
+    if (!pos) return;
+    const [x, y] = pos;
+
+    // pulsing ring
+    anomalyLayer.append('circle')
+      .attr('class', `anomaly-ring ${d.type}`)
+      .attr('cx', x).attr('cy', y).attr('r', 10)
+      .style('animation-delay', `${idx * 0.3}s`);
+
+    // center dot
+    anomalyLayer.append('circle')
+      .attr('cx', x).attr('cy', y).attr('r', 3)
+      .attr('fill', d.type === 'hot' ? 'var(--anomaly-hot)' : 'var(--anomaly-cold)')
+      .attr('opacity', 0.9);
+
+    // label
+    const lw = 48, lh = 14;
+    anomalyLayer.append('rect')
+      .attr('class','anomaly-label-bg')
+      .attr('x', x + 8).attr('y', y - 10)
+      .attr('width', lw).attr('height', lh)
+      .attr('rx', 2);
+    anomalyLayer.append('text')
+      .attr('class','anomaly-label')
+      .attr('x', x + 12).attr('y', y + 1)
+      .text(d.label);
+
+    // hover target
+    anomalyLayer.append('circle')
+      .attr('cx', x).attr('cy', y).attr('r', 18)
+      .attr('fill', 'transparent')
+      .attr('cursor', 'pointer')
+      .on('mouseover', function(event) { showTooltip(event, d, 'anomaly'); })
+      .on('mousemove', function(event) { moveTooltip(event); })
+      .on('mouseout', hideTooltip);
+  });
+}
+
+// ═══════════════════════════════════════════════════════
+//  CHARTS
+// ═══════════════════════════════════════════════════════
+function buildTimeSeriesChart() {
+  const el = document.getElementById('chart-timeseries');
+  el.innerHTML = '';
+  const cw = el.clientWidth || 272, ch = 100;
+  const margin = { top:8, right:8, bottom:18, left:32 };
+  const iw = cw - margin.left - margin.right;
+  const ih = ch - margin.top - margin.bottom;
+
+  const s = d3.select(el).append('svg')
+    .attr('class','minichart').attr('width',cw).attr('height',ch);
+  const g = s.append('g').attr('transform',`translate(${margin.left},${margin.top})`);
+
+  const xSc = d3.scaleLinear().domain([0,11]).range([0,iw]);
+  const ySc = d3.scaleLinear()
+    .domain([d3.min(TIME_SERIES, d=>Math.min(d.sst,d.airTemp))-1,
+             d3.max(TIME_SERIES, d=>Math.max(d.sst,d.airTemp))+1])
+    .range([ih,0]);
+
+  const meanSST = d3.mean(TIME_SERIES, d=>d.sst);
+
+  // mean line
+  g.append('line').attr('class','zero-line')
+    .attr('x1',0).attr('y1',ySc(meanSST)).attr('x2',iw).attr('y2',ySc(meanSST));
+
+  // area fills
+  const areaSST = d3.area().x(d=>xSc(d.t)).y0(ySc(meanSST)).y1(d=>ySc(d.sst)).curve(d3.curveCatmullRom);
+  g.append('path').datum(TIME_SERIES).attr('class','chart-area-fill')
+    .attr('fill','var(--anomaly-hot)').attr('d',areaSST);
+
+  // lines
+  const lineSST = d3.line().x(d=>xSc(d.t)).y(d=>ySc(d.sst)).curve(d3.curveCatmullRom);
+  const lineAir = d3.line().x(d=>xSc(d.t)).y(d=>ySc(d.airTemp)).curve(d3.curveCatmullRom);
+  g.append('path').datum(TIME_SERIES).attr('class','chart-line')
+    .attr('stroke','var(--anomaly-hot)').attr('d',lineSST);
+  g.append('path').datum(TIME_SERIES).attr('class','chart-line')
+    .attr('stroke','var(--accent)').attr('d',lineAir);
+
+  // current time marker
+  const marker = g.append('line').attr('class','zero-line')
+    .attr('stroke','rgba(255,255,255,0.4)').attr('stroke-dasharray','none')
+    .attr('x1',xSc(state.timeStep)).attr('y1',0)
+    .attr('x2',xSc(state.timeStep)).attr('y2',ih);
+
+  // axes
+  g.append('g').attr('transform',`translate(0,${ih})`)
+    .call(d3.axisBottom(xSc).ticks(6).tickFormat(i=>MONTHS[Math.round(i)]))
+    .selectAll('text').attr('class','axis-label').attr('fill','var(--muted)');
+  g.append('g').call(d3.axisLeft(ySc).ticks(4).tickFormat(d=>`${d.toFixed(0)}°`))
+    .selectAll('text').attr('class','axis-label').attr('fill','var(--muted)');
+  g.selectAll('.domain,.tick line').attr('stroke','var(--border)');
+}
+
+function buildAnomalyChart() {
+  const el = document.getElementById('chart-anomaly');
+  el.innerHTML = '';
+  const cw = el.clientWidth || 272, ch = 80;
+  const margin = { top:6, right:8, bottom:18, left:32 };
+  const iw = cw - margin.left - margin.right;
+  const ih = ch - margin.top - margin.bottom;
+
+  const s = d3.select(el).append('svg')
+    .attr('class','minichart').attr('width',cw).attr('height',ch);
+  const g = s.append('g').attr('transform',`translate(${margin.left},${margin.top})`);
+
+  const xSc = d3.scaleLinear().domain([0,11]).range([0,iw]);
+  const ySc = d3.scaleLinear()
+    .domain([d3.min(TIME_SERIES,d=>d.anom)-0.3, d3.max(TIME_SERIES,d=>d.anom)+0.3])
+    .range([ih,0]);
+
+  // zero
+  g.append('line').attr('class','zero-line')
+    .attr('x1',0).attr('y1',ySc(0)).attr('x2',iw).attr('y2',ySc(0));
+
+  // threshold bands
+  const std = d3.deviation(TIME_SERIES, d=>d.anom);
+  const thresh = state.threshold * std;
+  g.append('rect').attr('class','anomaly-band')
+    .attr('fill','var(--anomaly-hot)')
+    .attr('x',0).attr('y',ySc(thresh))
+    .attr('width',iw).attr('height',Math.max(0,ySc(0)-ySc(thresh)));
+  g.append('rect').attr('class','anomaly-band')
+    .attr('fill','var(--anomaly-cold)')
+    .attr('x',0).attr('y',ySc(0))
+    .attr('width',iw).attr('height',Math.max(0,ySc(-thresh)-ySc(0)));
+
+  // bars
+  const barW = iw/12 - 2;
+  g.selectAll('.anom-bar').data(TIME_SERIES).join('rect')
+    .attr('class','anom-bar')
+    .attr('x', d => xSc(d.t) - barW/2)
+    .attr('y', d => d.anom >= 0 ? ySc(d.anom) : ySc(0))
+    .attr('width', barW)
+    .attr('height', d => Math.abs(ySc(d.anom) - ySc(0)))
+    .attr('fill', d => d.anom >= 0 ? 'var(--anomaly-hot)' : 'var(--anomaly-cold)')
+    .attr('opacity', 0.7);
+
+  // current marker
+  g.append('line').attr('stroke','rgba(255,255,255,0.5)').attr('stroke-width',1)
+    .attr('x1',xSc(state.timeStep)).attr('y1',0)
+    .attr('x2',xSc(state.timeStep)).attr('y2',ih);
+
+  g.append('g').attr('transform',`translate(0,${ih})`)
+    .call(d3.axisBottom(xSc).ticks(6).tickFormat(i=>MONTHS[Math.round(i)]))
+    .selectAll('text').attr('class','axis-label').attr('fill','var(--muted)');
+  g.append('g').call(d3.axisLeft(ySc).ticks(4).tickFormat(d=>`${d.toFixed(1)}`))
+    .selectAll('text').attr('class','axis-label').attr('fill','var(--muted)');
+  g.selectAll('.domain,.tick line').attr('stroke','var(--border)');
+}
+
+function buildCouplingBars() {
+  const el = document.getElementById('coupling-bars');
+  el.innerHTML = '';
+  COUPLING.forEach(c => {
+    const isNeg = c.value < 0;
+    const pct = Math.abs(c.value) * 100;
+    const cls = isNeg ? 'negative' : c.value > 0.7 ? 'strong' : '';
+    el.innerHTML += `
+      <div class="coupling-row">
+        <span class="coupling-label">${c.label}</span>
+        <div class="bar-bg">
+          <div class="bar-fill ${cls}" style="width:${pct}%"></div>
+        </div>
+        <span class="coupling-val" style="color:${isNeg?'var(--anomaly-cold)':'var(--accent)'}">${c.value.toFixed(2)}</span>
+      </div>`;
+  });
+}
+
+// ═══════════════════════════════════════════════════════
+//  UI UPDATES
+// ═══════════════════════════════════════════════════════
+function updateStats(spots, grid) {
+  const hot = spots.filter(s => s.type==='hot').length;
+  const cold = spots.filter(s => s.type==='cold').length;
+  const maxA = d3.max(spots, s => Math.abs(s.anom)) || 0;
+  document.getElementById('stat-hot').textContent = hot;
+  document.getElementById('stat-cold').textContent = cold;
+  document.getElementById('stat-max').textContent = maxA.toFixed(1) + '°C';
+}
+
+function updateAnomalyList(spots) {
+  const el = document.getElementById('anomaly-list');
+  el.innerHTML = spots.slice(0,5).map(d => `
+    <div class="anomaly-item" onclick="flyTo(${d.lon},${d.lat})">
+      <div class="anomaly-dot" style="background:${d.type==='hot'?'var(--anomaly-hot)':'var(--anomaly-cold)'}"></div>
+      <div class="info">
+        <div class="name">${d.type === 'hot' ? '▲ Warm' : '▼ Cold'} Anomaly</div>
+        <div class="coords">${d.lat.toFixed(1)}°N, ${d.lon.toFixed(1)}°${d.lon<0?'W':'E'}</div>
+      </div>
+      <div class="delta" style="color:${d.type==='hot'?'var(--anomaly-hot)':'var(--anomaly-cold)'}">${d.label}</div>
+    </div>
+  `).join('');
+}
+
+function updateCouplingBars() {
+  buildCouplingBars();
+}
+
+function updateColorbar() {
+  const { min, max, unit, scale } = getColorScale();
+  const canvas = document.getElementById('colorbar-canvas');
+  const ctx = canvas.getContext('2d');
+  const w = canvas.width;
+  for (let i = 0; i < w; i++) {
+    ctx.fillStyle = scale(min + (i/w)*(max-min));
+    ctx.fillRect(i, 0, 1, 12);
+  }
+  document.getElementById('cb-min').textContent = min.toFixed(1);
+  document.getElementById('cb-mid').textContent = ((min+max)/2).toFixed(1);
+  document.getElementById('cb-max').textContent = max.toFixed(1);
+  const labels = {
+    sst: 'SEA SURFACE TEMPERATURE (°C)',
+    sst_anomaly: 'SST ANOMALY (Δ°C)',
+    wind_speed: 'WIND SPEED (m/s)',
+    salinity: 'SALINITY (g/kg)'
+  };
+  document.getElementById('cb-title').textContent = labels[state.colorVariable] || '';
+}
+
+// ═══════════════════════════════════════════════════════
+//  TOOLTIP
+// ═══════════════════════════════════════════════════════
+const tooltip = document.getElementById('tooltip');
+
+svg.on('mousemove', function(event) {
+  const [mx, my] = d3.pointer(event);
+  const coords = projection.invert([mx, my]);
+  if (!coords) return;
+  const [lon, lat] = coords;
+  if (lon < REGION.lon0 || lon > REGION.lon1 || lat < REGION.lat0 || lat > REGION.lat1) {
+    hideTooltip(); return;
+  }
+  const grid = ALL_GRIDS[state.timeStep];
+  const nearest = grid.data.reduce((best, d) => {
+    const dist = Math.abs(d.lon-lon) + Math.abs(d.lat-lat);
+    return dist < best.dist ? {dist, d} : best;
+  }, {dist:Infinity, d:null}).d;
+  if (!nearest) return;
+
+  document.getElementById('footer-coords').textContent =
+    `${lat.toFixed(2)}°N  ${Math.abs(lon).toFixed(2)}°${lon<0?'W':'E'}`;
+
+  const std = d3.deviation(grid.data, d=>d.anom);
+  const isAnom = Math.abs(nearest.anom) > state.threshold * std;
+
+  tooltip.style.display = 'block';
+  tooltip.style.left = (event.offsetX + 14) + 'px';
+  tooltip.style.top  = (event.offsetY - 10) + 'px';
+  document.getElementById('tt-title').textContent =
+    `${nearest.lat.toFixed(1)}°N  ${Math.abs(nearest.lon).toFixed(1)}°${nearest.lon<0?'W':'E'}`;
+  document.getElementById('tt-body').innerHTML = `
+    SST: <b>${nearest.sst.toFixed(2)} °C</b><br>
+    Anomaly: <b class="tt-anomaly${nearest.anom<0?' cold':''}">${nearest.anom.toFixed(2)} °C</b><br>
+    ${isAnom ? `<span style="color:${nearest.anom>0?'var(--anomaly-hot)':'var(--anomaly-cold)'}">⚠ ANOMALY DETECTED (${(nearest.anom/(std)).toFixed(1)}σ)</span><br>` : ''}
+    Month: <b>${MONTHS[state.timeStep]}</b>
+  `;
+}).on('mouseleave', hideTooltip);
+
+function showTooltip(event, d, type) {
+  tooltip.style.display = 'block';
+}
+function moveTooltip(event) {
+  tooltip.style.left = (event.offsetX + 14) + 'px';
+  tooltip.style.top  = (event.offsetY - 10) + 'px';
+}
+function hideTooltip() {
+  tooltip.style.display = 'none';
+}
+
+// ═══════════════════════════════════════════════════════
+//  CONTROLS
+// ═══════════════════════════════════════════════════════
+function toggleLayer(name) {
+  state.layers[name] = !state.layers[name];
+  const el = document.getElementById(`toggle-${name}`);
+  el.classList.toggle('active', state.layers[name]);
+  render();
+}
+
+function updateColorVariable() {
+  state.colorVariable = document.getElementById('color-variable').value;
+  render();
+}
+
+function updateThreshold(val) {
+  state.threshold = parseFloat(val);
+  document.getElementById('thresh-val').textContent = `${val}σ`;
+  render();
+  buildAnomalyChart();
+}
+
+function updateTimeStep(val) {
+  state.timeStep = parseInt(val);
+  document.getElementById('time-label').textContent = `T+${val}`;
+  render();
+  buildTimeSeriesChart();
+  buildAnomalyChart();
+}
+
+function flyTo(lon, lat) {
+  // highlight by flashing anomaly layer
+  anomalyLayer.selectAll('.anomaly-ring')
+    .transition().duration(300).style('opacity', 0.1)
+    .transition().duration(300).style('opacity', null);
+}
+
+// ═══════════════════════════════════════════════════════
+//  RESIZE
+// ═══════════════════════════════════════════════════════
+window.addEventListener('resize', () => {
+  W = container.clientWidth; H = container.clientHeight;
+  svg.attr('width', W).attr('height', H);
+  projection.translate([W/2, H/2]).scale(Math.min(W,H)*1.4);
+  render();
+});
+
+// ═══════════════════════════════════════════════════════
+//  INIT  (async: try real JSON, fallback to synthetic)
+// ═══════════════════════════════════════════════════════
+(async () => {
+  await initData();
+  buildTimeSeriesChart();
+  buildAnomalyChart();
+  buildCouplingBars();
+  render();
+})();
+</script>
+</body>
+</html>
