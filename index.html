@@ -39,9 +39,8 @@
     color: var(--text);
     font-family: 'Crimson Pro', Georgia, serif;
     font-size: 15px;
-    overflow-y: auto;
-    overflow-x: hidden;
-    min-height: 100vh;
+    overflow: hidden;
+    height: 100vh;
     display: flex;
     flex-direction: column;
   }
@@ -74,13 +73,44 @@
   @keyframes pulse { 0%,100%{opacity:1} 50%{opacity:0.3} }
 
   /* ── LAYOUT ── */
-  .main-layout { display:flex; flex:1; overflow:visible; min-height:0; }
+  .main-layout { display:flex; flex:1; overflow:hidden; min-height:0; height:0; }
+
+  /* ── RESIZE HANDLES ── */
+  .rhandle {
+    position:absolute; z-index:50; background:transparent;
+    transition:background 0.15s;
+  }
+  .rhandle-ew {
+    top:0; bottom:0; width:5px; cursor:ew-resize;
+  }
+  .rhandle-ns {
+    left:0; right:0; height:5px; cursor:ns-resize; top:0;
+  }
+  .rhandle-ew:hover, .rhandle-ew.dragging { background:rgba(77,216,240,0.28); }
+  .rhandle-ns:hover, .rhandle-ns.dragging { background:rgba(77,216,240,0.28); }
+  .rhandle-ew::after, .rhandle-ns::after {
+    content:''; position:absolute; background:var(--border-light);
+    border-radius:2px; opacity:0; transition:opacity 0.15s;
+  }
+  .rhandle-ew:hover::after, .rhandle-ew.dragging::after {
+    opacity:1; width:2px; height:24px;
+    top:50%; left:50%; transform:translate(-50%,-50%);
+    box-shadow:-4px 0 0 var(--border-light),4px 0 0 var(--border-light);
+  }
+  .rhandle-ns:hover::after, .rhandle-ns.dragging::after {
+    opacity:1; height:2px; width:24px;
+    left:50%; top:50%; transform:translate(-50%,-50%);
+    box-shadow:0 -4px 0 var(--border-light),0 4px 0 var(--border-light);
+  }
+  body.resizing-ew { cursor:ew-resize !important; user-select:none !important; }
+  body.resizing-ns { cursor:ns-resize !important; user-select:none !important; }
 
   /* ── LEFT SIDEBAR ── */
   .sidebar {
-    width:220px; flex-shrink:0; background:var(--bg-deep);
+    width:var(--sidebar-w,220px); flex-shrink:0; background:var(--bg-deep);
     border-right:1px solid var(--border); display:flex; flex-direction:column;
-    padding:14px 12px; gap:16px; overflow-y:auto; align-self:stretch;
+    padding:14px 12px; gap:16px; overflow-y:auto; overflow-x:visible; align-self:stretch;
+    position:relative; min-width:140px; max-width:400px;
   }
   .sidebar::-webkit-scrollbar { width:4px; }
   .sidebar::-webkit-scrollbar-thumb { background:var(--border); border-radius:2px; }
@@ -271,18 +301,21 @@
   }
 
   /* ── CENTER COLUMN ── */
-  .center-column { flex:1; display:flex; flex-direction:column; overflow:visible; min-width:0; }
+  .center-column { flex:1; display:flex; flex-direction:column; overflow:hidden; min-width:0; min-height:0; }
 
   /* ── MAP AREA ── */
-  .map-container { flex:none; height:500px; position:relative; overflow:hidden; background:#111b28; }
+  .map-container { flex:1; min-height:0; position:relative; overflow:hidden; background:#111b28; }
   #map-svg { width:100%; height:100%; }
   .graticule { fill:none; stroke:var(--grid); stroke-width:0.5; }
   .coastline { fill:#162030; stroke:#253e5a; stroke-width:0.8; }
   .countries { fill:#131e2e; stroke:#1e3048; stroke-width:0.5; }
-  .sst-cell { stroke:none; }
-  .wind-arrow { stroke:rgba(180,210,240,0.45); stroke-width:1; fill:none; }
-  .wind-arrow.anomaly-hot { stroke:rgba(240,112,85,0.8); stroke-width:1.5; }
-  .wind-arrow.anomaly-cold { stroke:rgba(96,184,248,0.8); stroke-width:1.5; }
+  /* ── WIND ARROWS — high visibility ── */
+  .wind-arrow { stroke:rgba(220,235,255,0.82); stroke-width:1.8; fill:none; }
+  .wind-arrow.anomaly-hot  { stroke:rgba(255,140,100,0.95); stroke-width:2.5; }
+  .wind-arrow.anomaly-cold { stroke:rgba(100,190,255,0.95); stroke-width:2.5; }
+  .wind-head { stroke-width:1.8; fill:none; }
+  .wind-head.anomaly-hot  { stroke:rgba(255,140,100,0.95); stroke-width:2.5; }
+  .wind-head.anomaly-cold { stroke:rgba(100,190,255,0.95); stroke-width:2.5; }
   .anomaly-ring { fill:none; stroke-width:1.5; animation:ringPulse 2.5s ease-in-out infinite; }
   .anomaly-ring.hot { stroke:var(--anomaly-hot); }
   .anomaly-ring.cold { stroke:var(--anomaly-cold); }
@@ -309,7 +342,8 @@
   .charts-strip {
     display:flex; flex-direction:row; gap:0;
     background:var(--bg-deep); border-top:1px solid var(--border);
-    height:280px; flex-shrink:0; overflow:visible;
+    height:var(--charts-h,240px); min-height:60px; max-height:520px;
+    flex-shrink:0; overflow:hidden; position:relative;
   }
   .chart-panel {
     flex:1; min-width:0; border-right:1px solid var(--border);
@@ -330,7 +364,12 @@
   .legend-line { width:16px; height:2px; }
 
   /* ── RIGHT DASHBOARD ── */
-  .dashboard { width:290px; flex-shrink:0; background:var(--bg-deep); border-left:1px solid var(--border); display:flex; flex-direction:column; overflow-y:auto; align-self:stretch; }
+  .dashboard {
+    width:var(--dashboard-w,290px); flex-shrink:0; background:var(--bg-deep);
+    border-left:1px solid var(--border); display:flex; flex-direction:column;
+    overflow-y:auto; align-self:stretch; position:relative;
+    min-width:180px; max-width:480px;
+  }
   .dashboard::-webkit-scrollbar { width:4px; }
   .dashboard::-webkit-scrollbar-thumb { background:var(--border); border-radius:2px; }
   .dash-panel { border-bottom:1px solid var(--border); padding:13px 15px; }
@@ -511,6 +550,91 @@
   /* storm legend in minimap */
   .minimap-storm-row { display:flex; align-items:center; gap:7px; font-family:'Crimson Pro',serif; font-size:11.5px; }
   .storm-icon-mini { width:14px; height:14px; flex-shrink:0; }
+
+  /* ── PLAY KATRINA BUTTON ── */
+  #play-katrina-btn {
+    background:rgba(240,112,85,0.18); border:1px solid rgba(240,112,85,0.55);
+    border-radius:3px; width:28px; height:28px;
+    display:flex; align-items:center; justify-content:center;
+    cursor:pointer; font-size:14px; color:var(--hurricane);
+    transition:background 0.15s, border-color 0.15s; user-select:none;
+  }
+  #play-katrina-btn:hover { background:rgba(240,112,85,0.3); border-color:var(--hurricane); }
+  #play-katrina-btn.playing { background:rgba(240,112,85,0.3); border-color:var(--hurricane); color:#fff; }
+  #play-katrina-btn:disabled {
+    opacity: 0.35; cursor: not-allowed; pointer-events: none;
+  }
+
+  /* ── ANIMATION HUD ── */
+  #anim-hud {
+    position:absolute; top:12px; left:50%; transform:translateX(-50%);
+    background:rgba(12,20,32,0.97); border:1px solid rgba(240,112,85,0.5);
+    border-radius:5px; padding:10px 16px; z-index:40;
+    min-width:340px; max-width:400px;
+    display:none; pointer-events:none;
+    box-shadow:0 4px 24px rgba(0,0,0,0.7);
+    backdrop-filter:blur(4px);
+  }
+  #anim-hud.visible { display:block; }
+  .hud-title {
+    font-family:'Lora',serif; font-size:12px; font-weight:600;
+    color:var(--hurricane); margin-bottom:7px;
+    display:flex; align-items:center; gap:8px;
+  }
+  .hud-cat-badge {
+    font-family:'Source Code Pro',monospace; font-size:9px; font-weight:700;
+    padding:2px 7px; border-radius:2px; letter-spacing:0.4px;
+    transition:background 0.4s,color 0.4s,border-color 0.4s;
+  }
+  .hud-row { display:flex; gap:14px; margin-bottom:7px; }
+  .hud-stat { display:flex; flex-direction:column; gap:1px; flex:1; }
+  .hud-lbl {
+    font-family:'Source Code Pro',monospace; font-size:8px;
+    color:var(--muted); letter-spacing:0.5px; text-transform:uppercase;
+  }
+  .hud-val {
+    font-family:'Source Code Pro',monospace; font-size:15px;
+    font-weight:600; color:var(--text-strong); transition:color 0.4s;
+  }
+  .hud-progress-wrap { margin-top:3px; }
+  .hud-progress-labels {
+    display:flex; justify-content:space-between;
+    font-family:'Source Code Pro',monospace; font-size:8px; color:var(--muted); margin-bottom:3px;
+  }
+  .hud-progress-track {
+    width:100%; height:5px; background:var(--border); border-radius:3px;
+    position:relative; overflow:visible;
+  }
+  .hud-progress-fill {
+    height:100%; background:linear-gradient(90deg,#aac4ff,#ffaa44,#ff2200);
+    border-radius:3px; transition:width 0.15s linear;
+  }
+  .hud-progress-dot {
+    position:absolute; top:50%; transform:translateY(-50%);
+    width:9px; height:9px; border-radius:50%; background:#fff;
+    border:2px solid var(--hurricane); margin-left:-4px;
+    box-shadow:0 0 7px rgba(240,112,85,0.8);
+    transition:left 0.15s linear;
+  }
+  .hud-step-dots { display:flex; justify-content:space-between; margin-top:6px; }
+  .hud-step-dot {
+    width:8px; height:8px; border-radius:50%;
+    border:1px solid rgba(255,255,255,0.2);
+    transition:transform 0.2s,border-color 0.2s,opacity 0.3s;
+    flex-shrink:0;
+  }
+  .hud-step-dot.done { opacity:0.65; }
+  .hud-step-dot.active { transform:scale(1.6); border-color:#fff !important; opacity:1; }
+  .hud-desc {
+    margin-top:7px; font-family:'Crimson Pro',serif; font-size:12px;
+    line-height:1.45; color:var(--text-dim);
+    border-top:1px solid var(--border); padding-top:5px;
+    min-height:32px; transition:opacity 0.3s;
+  }
+  .hud-desc strong { color:var(--text-strong); }
+
+  /* animation eye layer */
+  #l-anim { pointer-events:none; }
 </style>
 </head>
 <body>
@@ -530,7 +654,8 @@
 <div class="main-layout">
 
   <!-- LEFT SIDEBAR -->
-  <div class="sidebar">
+  <div class="sidebar" id="sidebar">
+    <div class="rhandle rhandle-ew" id="rh-sidebar" style="right:-3px;left:auto;"></div>
 
     <!-- TIME CONTROL -->
     <div class="sidebar-section">
@@ -556,7 +681,7 @@
       <div class="layer-toggle active" id="toggle-sst" onclick="toggleLayer('sst')">
         <span style="display:flex;align-items:center;gap:7px">
           <span class="color-swatch" style="background:linear-gradient(90deg,#1a5fa8,#e05828)"></span>
-          <span class="layer-name">SST</span>
+          <span class="layer-name">SST (color en flechas)</span>
         </span>
         <div class="toggle-switch"></div>
       </div>
@@ -706,9 +831,34 @@
       <div id="katrina-btn" onclick="followKatrina()">🌀 Centrar en Katrina</div>
       <!-- MAP NAV CONTROLS -->
       <div id="map-nav">
+        <div id="play-katrina-btn" onclick="toggleKatrinaAnim()" title="▶ Animar trayectoria de Katrina">▶</div>
         <div class="nav-btn" onclick="panMap(80,0)" title="Desplazar izquierda">◀</div>
         <div class="nav-btn" onclick="panMap(-80,0)" title="Desplazar derecha">▶</div>
         <div class="nav-btn" onclick="resetMapView()" title="Restablecer vista">⌂</div>
+      </div>
+      <!-- KATRINA ANIMATION HUD -->
+      <div id="anim-hud">
+        <div class="hud-title">
+          🌀 Huracán Katrina — trayectoria agosto 2005
+          <span class="hud-cat-badge" id="hud-cat">Cat. 1</span>
+        </div>
+        <div class="hud-row">
+          <div class="hud-stat"><div class="hud-lbl">Vientos máx.</div><div class="hud-val" id="hud-wind">—</div></div>
+          <div class="hud-stat"><div class="hud-lbl">SST anomalía</div><div class="hud-val" id="hud-sst">—</div></div>
+          <div class="hud-stat"><div class="hud-lbl">Z-Score</div><div class="hud-val" id="hud-z">—</div></div>
+          <div class="hud-stat"><div class="hud-lbl">Fecha</div><div class="hud-val" id="hud-date" style="font-size:11px">—</div></div>
+        </div>
+        <div class="hud-progress-wrap">
+          <div class="hud-progress-labels">
+            <span>25 Ago · Cat.1</span><span>28 Ago · Cat.5 ★</span><span>29 Ago · Tierra</span>
+          </div>
+          <div class="hud-progress-track">
+            <div class="hud-progress-fill" id="hud-pbar" style="width:0%"></div>
+            <div class="hud-progress-dot" id="hud-pdot" style="left:0%"></div>
+          </div>
+          <div class="hud-step-dots" id="hud-dots"></div>
+        </div>
+        <div class="hud-desc" id="hud-desc">Iniciando…</div>
       </div>
       <!-- LOCATION BUTTON -->
       <div id="map-info-btn" onclick="toggleMinimap()">🗺 Ubicación</div>
@@ -740,7 +890,8 @@
     </div>
 
     <!-- CHARTS STRIP -->
-    <div class="charts-strip">
+    <div class="charts-strip" id="charts-strip">
+      <div class="rhandle rhandle-ns" id="rh-charts"></div>
       <div class="chart-panel">
         <div class="chart-panel-title">SST vs temperatura del aire</div>
         <div class="chart-panel-subtitle">Serie mensual 2005 — punto central · anomalías de ciclones marcadas</div>
@@ -761,27 +912,104 @@
   </div><!-- /center-column -->
 
   <!-- RIGHT DASHBOARD -->
-  <div class="dashboard">
+  <div class="dashboard" id="dashboard">
+    <div class="rhandle rhandle-ew" id="rh-dashboard" style="left:-3px;right:auto;"></div>
+
+    <!-- Z-SCORE STATISTICS PANEL -->
     <div class="dash-panel">
-      <div class="dash-title">Anomalías detectadas</div>
-      <div style="font-family:'Crimson Pro',serif;font-size:11.5px;color:var(--text-dim);margin-bottom:8px;line-height:1.45;">
-        Clic para resaltar en el mapa. Los anillos parpadeantes indican outliers por Z-Score.
+      <div class="dash-title">Statistics — Z-Score</div>
+
+      <div class="stats-event-card hurricane">
+        <div class="event-name hurricane">🌀 Huracán Katrina</div>
+        <div class="event-meta">Golfo de México · Ago 2005 · Cat. 5</div>
+        <div class="zscore-bar-row">
+          <span class="zscore-label">SST Δ</span>
+          <div class="zscore-track"><div class="zscore-fill hot" id="zbar-katrina-sst" style="width:0%"></div></div>
+          <span class="zscore-val hot" id="zval-katrina-sst">—</span>
+        </div>
+        <div class="zscore-bar-row">
+          <span class="zscore-label">Viento</span>
+          <div class="zscore-track"><div class="zscore-fill hot" id="zbar-katrina-wind" style="width:0%"></div></div>
+          <span class="zscore-val hot" id="zval-katrina-wind">—</span>
+        </div>
+        <div class="zscore-bar-row">
+          <span class="zscore-label">Z-Score</span>
+          <div class="zscore-track"><div class="zscore-fill hot" id="zbar-katrina-z" style="width:0%"></div></div>
+          <span class="zscore-val hot" id="zval-katrina-z">—</span>
+        </div>
+        <div style="margin-top:6px;font-family:'Crimson Pro',serif;font-size:11.5px;color:var(--text-dim);line-height:1.45;">
+          La SST bajo el ojo superó la media regional en <strong style="color:var(--text-strong)">+4.8 °C</strong>. Corriente del Lazo proporcionó una capa cálida profunda que impidió el enfriamiento por surgencia, sosteniendo la cat. 5.
+        </div>
+        <div class="event-verdict outlier-yes" id="verdict-katrina">⚠ Outlier confirmado — &gt;4σ</div>
       </div>
-      <div class="anomaly-list" id="anomaly-list"></div>
+
+      <div class="stats-event-card cyclone" style="margin-top:4px;">
+        <div class="event-name cyclone">🌊 Ciclón extratropical</div>
+        <div class="event-meta">Atlántico Norte · Oct 2005 · Lv. 2</div>
+        <div class="zscore-bar-row">
+          <span class="zscore-label">SST Δ</span>
+          <div class="zscore-track"><div class="zscore-fill cold" id="zbar-cyclone-sst" style="width:0%"></div></div>
+          <span class="zscore-val cold" id="zval-cyclone-sst">—</span>
+        </div>
+        <div class="zscore-bar-row">
+          <span class="zscore-label">Viento</span>
+          <div class="zscore-track"><div class="zscore-fill cold" id="zbar-cyclone-wind" style="width:0%"></div></div>
+          <span class="zscore-val cold" id="zval-cyclone-wind">—</span>
+        </div>
+        <div class="zscore-bar-row">
+          <span class="zscore-label">Z-Score</span>
+          <div class="zscore-track"><div class="zscore-fill cold" id="zbar-cyclone-z" style="width:0%"></div></div>
+          <span class="zscore-val cold" id="zval-cyclone-z">—</span>
+        </div>
+        <div style="margin-top:6px;font-family:'Crimson Pro',serif;font-size:11.5px;color:var(--text-dim);line-height:1.45;">
+          Surgencia de aguas profundas frías generó un enfriamiento de <strong style="color:var(--text-strong)">−3.1 °C</strong> bajo la media de octubre. Outlier frío estadísticamente significativo.
+        </div>
+        <div class="event-verdict outlier-cold" id="verdict-cyclone">✓ Outlier frío — −2.8σ</div>
+      </div>
+
+      <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:6px;margin-top:8px;">
+        <div class="anomaly-stat">
+          <div class="val hot" id="stat-hot">—</div>
+          <div class="lbl">Cálidas</div>
+        </div>
+        <div class="anomaly-stat">
+          <div class="val cold" id="stat-cold">—</div>
+          <div class="lbl">Frías</div>
+        </div>
+        <div class="anomaly-stat">
+          <div class="val" id="stat-max" style="color:var(--text-strong);font-size:16px">—</div>
+          <div class="lbl">Max |Δ|</div>
+        </div>
+      </div>
     </div>
+
+    <!-- EVENTS LEGEND -->
     <div class="dash-panel">
       <div class="dash-title">Leyenda de eventos</div>
       <div style="font-family:'Crimson Pro',serif;font-size:12px;color:var(--text-dim);line-height:1.55;">
-        <div style="margin-bottom:6px;padding:6px 8px;background:rgba(240,112,85,0.08);border:1px solid rgba(240,112,85,0.25);border-radius:3px;">
-          <span style="color:var(--hurricane);font-weight:600">🌀 Katrina (Cat. 5)</span><br>
-          Huracán de categoría 5. Peak: 28 ago 2005. Vientos 280 km/h. SST Golfo de México: +4.5°C sobre media. Z-Score: ~4.2σ.
+        <div style="margin-bottom:8px;padding:8px 10px;background:rgba(240,112,85,0.08);border:1px solid rgba(240,112,85,0.25);border-radius:3px;">
+          <span style="color:var(--hurricane);font-weight:600;font-family:'Lora',serif;">🌀 Katrina (Cat. 5)</span><br>
+          Huracán de categoría 5. Peak: 28 ago 2005. Vientos 280 km/h. SST Golfo: +4.5°C sobre media. Z-Score: ~4.2σ.<br>
+          <span style="font-family:'Source Code Pro',monospace;font-size:9px;color:var(--muted);">Landfall: 29 Ago · 29.5°N 89.6°O</span>
         </div>
-        <div style="padding:6px 8px;background:rgba(96,184,248,0.08);border:1px solid rgba(96,184,248,0.25);border-radius:3px;">
-          <span style="color:var(--cyclone);font-weight:600">🌊 Ciclón extratropical</span><br>
-          Sistema de baja presión extratropical, Atlántico Norte, octubre 2005. Genera enfriamiento superficial por surgencia. Z-Score: −2.8σ.
+        <div style="padding:8px 10px;background:rgba(96,184,248,0.08);border:1px solid rgba(96,184,248,0.25);border-radius:3px;">
+          <span style="color:var(--cyclone);font-weight:600;font-family:'Lora',serif;">🌊 Ciclón extratropical</span><br>
+          Sistema de baja presión extratropical, Atlántico Norte, octubre 2005. Surgencia: −3°C. Z-Score: −2.8σ.<br>
+          <span style="font-family:'Source Code Pro',monospace;font-size:9px;color:var(--muted);">44°N 28°O · Oct 2005</span>
         </div>
       </div>
     </div>
+
+    <!-- Z-SCORE EXPLAINER -->
+    <div class="dash-panel">
+      <div class="dash-title">Metodología Z-Score</div>
+      <div class="info-box">
+        <div class="info-box-title">Z = (SST − μ) / σ</div>
+        <p>La media <strong>μ</strong> y desviación <strong>σ</strong> se calculan sobre la distribución completa de SST de los 12 meses × toda la región. Un valor <strong>|Z| &gt; σ-threshold</strong> (ajustable en el sidebar) se clasifica como outlier estadístico y aparece marcado en el mapa con anillos parpadeantes.</p>
+        <p style="margin-top:6px;">Katrina genera Z ≈ <strong style="color:var(--hurricane)">+4.2σ</strong> — un evento extremadamente improbable bajo distribución normal, confirmando su naturaleza de outlier.</p>
+      </div>
+    </div>
+
   </div>
 
 </div>
@@ -859,7 +1087,8 @@ let state = {
   timeStep: 7,          // empieza en agosto (Katrina)
   threshold: 1.5,
   colorVariable: 'sst',
-  layers: { sst: true, wind: true, anomaly: true, storms: true }
+  layers: { sst: true, wind: true, anomaly: true, storms: true },
+  katrinaAnimRunning: false
 };
 
 // ─────────────────────────────────────────────────────
@@ -1092,6 +1321,14 @@ const svg = d3.select('#map-svg');
 let W = container.clientWidth, H = container.clientHeight;
 svg.attr('width', W).attr('height', H);
 
+let mapMotionLock = 0;
+function updateKatrinaPlayButton() {
+  const btn = document.getElementById('play-katrina-btn');
+  if (!btn) return;
+  const blocked = mapMotionLock > 0 && !state.katrinaAnimRunning;
+  btn.disabled = blocked;
+}
+
 // Base translate (center of viewport) — will be offset by pan
 let baseTranslate = [W/2, H/2];
 let panOffset = [0, 0];   // current user-applied offset in pixels
@@ -1108,11 +1345,11 @@ const projection = d3.geoMercator()
 
 const path = d3.geoPath().projection(projection);
 
-const sstLayer     = svg.append('g').attr('id','l-sst');
 const geoLayer     = svg.append('g').attr('id','l-geo');
 const windLayer    = svg.append('g').attr('id','l-wind');
 const anomalyLayer = svg.append('g').attr('id','l-anomaly');
 const stormLayer   = svg.append('g').attr('id','l-storms');
+const animLayer    = svg.append('g').attr('id','l-anim');
 
 geoLayer.append('path').datum(d3.geoGraticule()()).attr('class','graticule').attr('d', path);
 
@@ -1127,6 +1364,8 @@ mapSvgEl.addEventListener('mousedown', function(e) {
   if (e.button !== 0) return;
   dragStart = [e.clientX, e.clientY];
   panOffsetAtDragStart = [...panOffset];
+  mapMotionLock++;
+  updateKatrinaPlayButton();
   mapSvgEl.classList.add('panning');
   e.preventDefault();
 });
@@ -1152,6 +1391,8 @@ window.addEventListener('mousemove', function(e) {
 window.addEventListener('mouseup', function() {
   if (!dragStart) return;
   dragStart = null;
+  mapMotionLock = Math.max(0, mapMotionLock - 1);
+  updateKatrinaPlayButton();
   mapSvgEl.classList.remove('panning');
   document.getElementById('pan-limit-hint').classList.remove('at-limit');
 });
@@ -1161,6 +1402,8 @@ mapSvgEl.addEventListener('touchstart', function(e) {
   if (e.touches.length !== 1) return;
   dragStart = [e.touches[0].clientX, e.touches[0].clientY];
   panOffsetAtDragStart = [...panOffset];
+  mapMotionLock++;
+  updateKatrinaPlayButton();
   e.preventDefault();
 }, { passive: false });
 
@@ -1175,7 +1418,13 @@ mapSvgEl.addEventListener('touchmove', function(e) {
   e.preventDefault();
 }, { passive: false });
 
-mapSvgEl.addEventListener('touchend', function() { dragStart = null; });
+mapSvgEl.addEventListener('touchend', function() {
+  if (dragStart) {
+    dragStart = null;
+    mapMotionLock = Math.max(0, mapMotionLock - 1);
+    updateKatrinaPlayButton();
+  }
+});
 
 // Double-click resets view
 mapSvgEl.addEventListener('dblclick', function(e) {
@@ -1198,12 +1447,10 @@ function renderAll() {
   const wind = ALL_WIND[t];
   if (!grid) return;
   const spots = detectAnomalySpots(grid, state.threshold);
-  renderSST(grid);
   renderWind(wind, grid);
   renderAnomalies(spots);
   renderStorms(t);
-  // Rebuild graticule path
-  geoLayer.select('.graticule').attr('d', path);
+  geoLayer.selectAll('path').attr('d', path);
 }
 
 // Pan offset indicator in footer
@@ -1225,12 +1472,18 @@ function panMap(dx, dy) {
 function animatePanTo(targetX, targetY, duration) {
   const startX = panOffset[0], startY = panOffset[1];
   const startTime = performance.now();
+  mapMotionLock++;
+  updateKatrinaPlayButton();
   function step(now) {
     const t = Math.min(1, (now - startTime) / duration);
     const ease = t < 0.5 ? 2*t*t : -1+(4-2*t)*t; // ease in-out quad
     panOffset = [startX + (targetX - startX) * ease, startY + (targetY - startY) * ease];
     applyPan();
     if (t < 1) requestAnimationFrame(step);
+    else {
+      mapMotionLock = Math.max(0, mapMotionLock - 1);
+      updateKatrinaPlayButton();
+    }
   }
   requestAnimationFrame(step);
 }
@@ -1286,65 +1539,86 @@ function render() {
   const wind = ALL_WIND[t];
   const spots = detectAnomalySpots(grid, state.threshold);
 
-  renderSST(grid);
   renderWind(wind, grid);
   renderAnomalies(spots);
   renderStorms(t);
   updateColorbar();
   updateStats(spots);
-  updateAnomalyList(spots);
   updateTimeDisplay(t);
 }
 
-function renderSST(grid) {
-  const { nx, ny } = grid;
-  const { scale, accessor } = getColorScale();
-  const dLon = (REGION.lon1 - REGION.lon0) / nx;
-  const dLat = (REGION.lat1 - REGION.lat0) / ny;
-
-  if (state.layers.sst) {
-    sstLayer.selectAll('.sst-cell').data(grid.data.filter(d => Number.isFinite(accessor(d)))).join('path')
-      .attr('class','sst-cell')
-      .attr('d', d => {
-        const pts = [[d.lon,d.lat],[d.lon+dLon,d.lat],[d.lon+dLon,d.lat+dLat],[d.lon,d.lat+dLat]]
-          .map(([ln,lt]) => projection([ln,lt]));
-        if (pts.some(p => !p)) return '';
-        return `M${pts[0]}L${pts[1]}L${pts[2]}L${pts[3]}Z`;
-      })
-      .attr('fill', d => scale(accessor(d)))
-      .attr('opacity', 0.88);
-  } else {
-    sstLayer.selectAll('.sst-cell').attr('opacity', 0);
+function sampleSSTAt(grid, lon, lat) {
+  if (!grid) return NaN;
+  const { nx, ny, data } = grid;
+  const lonC = Math.max(REGION.lon0, Math.min(REGION.lon1, lon));
+  const latC = Math.max(REGION.lat0, Math.min(REGION.lat1, lat));
+  const dLon = (REGION.lon1 - REGION.lon0) / (nx - 1 || 1);
+  const dLat = (REGION.lat1 - REGION.lat0) / (ny - 1 || 1);
+  const fi = (lonC - REGION.lon0) / dLon;
+  const fj = (latC - REGION.lat0) / dLat;
+  const i0 = Math.max(0, Math.min(nx - 2, Math.floor(fi)));
+  const j0 = Math.max(0, Math.min(ny - 2, Math.floor(fj)));
+  const i1 = i0 + 1, j1 = j0 + 1;
+  const tx = fi - i0, ty = fj - j0;
+  const idx = (ii, jj) => jj * nx + ii;
+  const v = i => data[i]?.sst;
+  const v00 = v(idx(i0, j0)), v10 = v(idx(i1, j0)), v01 = v(idx(i0, j1)), v11 = v(idx(i1, j1));
+  if (![v00, v10, v01, v11].every(Number.isFinite)) {
+    const ok = [v00, v10, v01, v11].filter(Number.isFinite);
+    return ok.length ? ok[0] : NaN;
   }
+  return (1 - tx) * (1 - ty) * v00 + tx * (1 - ty) * v10 + (1 - tx) * ty * v01 + tx * ty * v11;
 }
 
 function renderWind(wind, sstGrid) {
-  if (!state.layers.wind) { windLayer.selectAll('*').remove(); return; }
-  const std = d3.deviation(sstGrid.data, d => d.anom);
+  const showArrows = state.layers.wind || state.layers.sst;
+  if (!showArrows || !wind) { windLayer.selectAll('*').remove(); return; }
+
+  const useSstColors = state.layers.sst;
+  const std = d3.deviation(sstGrid.data, d => d.anom) || 1;
   const g = windLayer.selectAll('g.arrow-g').data(wind, d => `${d.lon}_${d.lat}`);
   const gAll = g.enter().append('g').attr('class','arrow-g').merge(g);
 
   gAll.each(function(d) {
-    const [x0, y0] = projection([d.lon, d.lat]) || [0,0];
+    const pos = projection([d.lon, d.lat]);
+    if (!pos) { d3.select(this).selectAll('*').remove(); return; }
+    const [x0, y0] = pos;
     const _U = d.U_at || 0, _V = d.V_at || 0;
-    const angle = Math.atan2(-_V, _U);
     const spd = d.speed || Math.sqrt(_U*_U + _V*_V);
-    const len = Math.min(spd * 0.3, 14);
+    if (spd < 0.5) { d3.select(this).selectAll('*').remove(); return; }
+
+    const angle = Math.atan2(-_V, _U);
+    const len = Math.max(10, Math.min(24, spd * 0.95 + 7));
     const x1 = x0 + len * Math.cos(angle);
     const y1 = y0 - len * Math.sin(angle);
 
-    const nearSST = sstGrid.data.find(s => Math.abs(s.lat-d.lat)<1.5 && Math.abs(s.lon-d.lon)<2);
-    const anom = nearSST ? nearSST.anom : 0;
-    let cls = 'wind-arrow';
-    if (anom > std * state.threshold) cls += ' anomaly-hot';
-    else if (anom < -std * state.threshold) cls += ' anomaly-cold';
+    let stroke = 'rgba(220,235,255,0.82)';
+    let strokeW = 1.8;
+    if (useSstColors) {
+      const sstVal = sampleSSTAt(sstGrid, d.lon, d.lat);
+      if (Number.isFinite(sstVal)) {
+        stroke = sstScale(sstVal);
+        strokeW = 2.4;
+      }
+    } else {
+      const nearSST = sstGrid.data.find(s => Math.abs(s.lat - d.lat) < 1.5 && Math.abs(s.lon - d.lon) < 2);
+      const anom = nearSST ? nearSST.anom : 0;
+      if (anom > std * state.threshold) { stroke = 'rgba(255,140,100,0.95)'; strokeW = 2.5; }
+      else if (anom < -std * state.threshold) { stroke = 'rgba(100,190,255,0.95)'; strokeW = 2.5; }
+    }
 
     d3.select(this).selectAll('*').remove();
-    d3.select(this).append('line').attr('x1',x0).attr('y1',y0).attr('x2',x1).attr('y2',y1).attr('class',cls);
-    const hx  = x1 + 4*Math.cos(angle+Math.PI*0.8), hy  = y1-4*Math.sin(angle+Math.PI*0.8);
-    const hx2 = x1 + 4*Math.cos(angle-Math.PI*0.8), hy2 = y1-4*Math.sin(angle-Math.PI*0.8);
-    d3.select(this).append('line').attr('x1',x1).attr('y1',y1).attr('x2',hx).attr('y2',hy).attr('class',cls);
-    d3.select(this).append('line').attr('x1',x1).attr('y1',y1).attr('x2',hx2).attr('y2',hy2).attr('class',cls);
+    const shaft = d3.select(this).append('line')
+      .attr('x1', x0).attr('y1', y0).attr('x2', x1).attr('y2', y1)
+      .attr('stroke', stroke).attr('stroke-width', strokeW).attr('fill', 'none');
+    const hLen = Math.max(5, len * 0.35);
+    const hx1 = x1 + hLen * Math.cos(angle + Math.PI * 0.72), hy1 = y1 - hLen * Math.sin(angle + Math.PI * 0.72);
+    const hx2 = x1 + hLen * Math.cos(angle - Math.PI * 0.72), hy2 = y1 - hLen * Math.sin(angle - Math.PI * 0.72);
+    d3.select(this).append('line').attr('x1', x1).attr('y1', y1).attr('x2', hx1).attr('y2', hy1)
+      .attr('stroke', stroke).attr('stroke-width', strokeW).attr('fill', 'none');
+    d3.select(this).append('line').attr('x1', x1).attr('y1', y1).attr('x2', hx2).attr('y2', hy2)
+      .attr('stroke', stroke).attr('stroke-width', strokeW).attr('fill', 'none');
+    if (useSstColors) shaft.attr('filter', 'drop-shadow(0 0 1px rgba(0,0,0,0.5))');
   });
   g.exit().remove();
 }
@@ -1761,16 +2035,27 @@ function updateAnomalyList(spots) {
 }
 
 function updateColorbar() {
-  const {min,max,scale} = getColorScale();
+  let min, max, scale, title;
+  if (state.layers.sst) {
+    min = 0; max = 32;
+    scale = sstScale;
+    title = 'SST en flechas — frío (azul) → cálido (rojo) · °C';
+  } else {
+    ({ min, max, scale } = getColorScale());
+    const lbl = { sst:'Temperatura superficial del mar (°C)', sst_anomaly:'Anomalía SST (Δ°C)', wind_speed:'Velocidad del viento (m/s)' };
+    title = lbl[state.colorVariable] || '';
+  }
   const canvas = document.getElementById('colorbar-canvas');
   const ctx = canvas.getContext('2d');
   const w = canvas.width;
-  for (let i=0;i<w;i++) { ctx.fillStyle=scale(min+(i/w)*(max-min)); ctx.fillRect(i,0,1,11); }
+  for (let i = 0; i < w; i++) {
+    ctx.fillStyle = scale(min + (i / w) * (max - min));
+    ctx.fillRect(i, 0, 1, 11);
+  }
   document.getElementById('cb-min').textContent = min.toFixed(1);
-  document.getElementById('cb-mid').textContent = ((min+max)/2).toFixed(1);
+  document.getElementById('cb-mid').textContent = ((min + max) / 2).toFixed(1);
   document.getElementById('cb-max').textContent = max.toFixed(1);
-  const lbl = {sst:'Temperatura superficial del mar (°C)',sst_anomaly:'Anomalía SST (Δ°C)',wind_speed:'Velocidad del viento (m/s)'};
-  document.getElementById('cb-title').textContent = lbl[state.colorVariable]||'';
+  document.getElementById('cb-title').textContent = title;
 }
 
 function updateTimeDisplay(t) {
@@ -2187,6 +2472,8 @@ function finishDashboardInit(realLoaded, meta) {
   buildMinimap();
   loadMainMapCoastlines();
   updateTimeStep(state.timeStep);
+  initResizeHandles();
+  updateKatrinaPlayButton();
 
   const hdr = document.querySelector('.header-right');
   if (hdr) {
@@ -2264,6 +2551,383 @@ function loadMainMapCoastlines() {
 
   finishDashboardInit(realLoaded, meta);
 })();
+
+// ═══════════════════════════════════════════════════════
+//  PANEL RESIZE HANDLES
+// ═══════════════════════════════════════════════════════
+function initResizeHandles() {
+  const root = document.documentElement;
+
+  function makeDragger({ handleId, bodyClass, onDrag, onEnd }) {
+    const handle = document.getElementById(handleId);
+    if (!handle) return;
+    handle.addEventListener('mousedown', e => {
+      e.preventDefault(); e.stopPropagation();
+      handle.classList.add('dragging');
+      document.body.classList.add(bodyClass);
+      const startX = e.clientX, startY = e.clientY;
+      const onMove = ev => onDrag(ev, startX, startY);
+      const onUp   = () => {
+        handle.classList.remove('dragging');
+        document.body.classList.remove(bodyClass);
+        window.removeEventListener('mousemove', onMove);
+        window.removeEventListener('mouseup', onUp);
+        if (onEnd) onEnd();
+      };
+      window.addEventListener('mousemove', onMove);
+      window.addEventListener('mouseup', onUp);
+    });
+    // Double-click resets to default
+    handle.addEventListener('dblclick', () => { if (onEnd) onEnd(true); });
+  }
+
+  function triggerMapResize() {
+    requestAnimationFrame(() => {
+      W = container.clientWidth; H = container.clientHeight;
+      svg.attr('width', W).attr('height', H);
+      baseTranslate = [W/2, H/2];
+      projection.translate([baseTranslate[0]+panOffset[0], baseTranslate[1]+panOffset[1]])
+                .scale(Math.min(W,H)*1.4);
+      renderAll();
+      clearTimeout(triggerMapResize._t);
+      triggerMapResize._t = setTimeout(() => { buildTimeSeriesChart(); buildAnomalyChart(); }, 80);
+    });
+  }
+
+  // ── Sidebar ──
+  const sidebar = document.getElementById('sidebar');
+  let sbW0;
+  makeDragger({
+    handleId: 'rh-sidebar', bodyClass: 'resizing-ew',
+    onDrag(e, sx) {
+      if (sbW0 === undefined) sbW0 = sidebar.offsetWidth;
+      const w = Math.max(140, Math.min(400, sbW0 + e.clientX - sx));
+      sidebar.style.width = w + 'px';
+      root.style.setProperty('--sidebar-w', w + 'px');
+      triggerMapResize();
+    },
+    onEnd(reset) {
+      sbW0 = undefined;
+      if (reset) { sidebar.style.width = '220px'; root.style.setProperty('--sidebar-w','220px'); }
+      triggerMapResize();
+    }
+  });
+
+  // ── Dashboard ──
+  const dashboard = document.getElementById('dashboard');
+  let dbW0;
+  makeDragger({
+    handleId: 'rh-dashboard', bodyClass: 'resizing-ew',
+    onDrag(e, sx) {
+      if (dbW0 === undefined) dbW0 = dashboard.offsetWidth;
+      const w = Math.max(180, Math.min(480, dbW0 - (e.clientX - sx)));
+      dashboard.style.width = w + 'px';
+      root.style.setProperty('--dashboard-w', w + 'px');
+      triggerMapResize();
+    },
+    onEnd(reset) {
+      dbW0 = undefined;
+      if (reset) { dashboard.style.width = '290px'; root.style.setProperty('--dashboard-w','290px'); }
+      triggerMapResize();
+    }
+  });
+
+  // ── Charts strip ──
+  const chartsStrip = document.getElementById('charts-strip');
+  let chH0, chY0;
+  makeDragger({
+    handleId: 'rh-charts', bodyClass: 'resizing-ns',
+    onDrag(e, sx, sy) {
+      if (chH0 === undefined) { chH0 = chartsStrip.offsetHeight; chY0 = sy; }
+      const h = Math.max(60, Math.min(520, chH0 - (e.clientY - chY0)));
+      chartsStrip.style.height = h + 'px';
+      root.style.setProperty('--charts-h', h + 'px');
+      triggerMapResize();
+    },
+    onEnd(reset) {
+      chH0 = undefined; chY0 = undefined;
+      if (reset) { chartsStrip.style.height = '240px'; root.style.setProperty('--charts-h','240px'); }
+      triggerMapResize();
+    }
+  });
+}
+
+// ═══════════════════════════════════════════════════════
+//  KATRINA ANIMATION ENGINE
+// ═══════════════════════════════════════════════════════
+const KANIM = {
+  running: false, rafId: null,
+  stepIdx: 0, segStart: 0, wake: [],
+  STEP_MS: 3800,  // ms per track segment — slow for detail
+  _lastWake: 0, _lastWind: 0
+};
+
+function catColor(cat) { return CAT_COLORS[Math.min(cat,5)]; }
+
+function lerpTrack(a, b, t) {
+  return {
+    lon:       a.lon       + (b.lon       - a.lon)       * t,
+    lat:       a.lat       + (b.lat       - a.lat)       * t,
+    cat:       t < 0.5 ? a.cat : b.cat,
+    windSpeed: a.windSpeed + (b.windSpeed  - a.windSpeed) * t,
+    sstAnom:   a.sstAnom   + (b.sstAnom   - a.sstAnom)   * t,
+    label:     t < 0.5 ? a.label : b.label,
+    desc:      t < 0.5 ? a.desc  : b.desc,
+  };
+}
+function easeInOut(t) { return t < 0.5 ? 2*t*t : -1+(4-2*t)*t; }
+
+function buildHUDDots() {
+  document.getElementById('hud-dots').innerHTML = KATRINA_TRACK.map((pt,i) =>
+    `<div class="hud-step-dot" id="kdot-${i}" style="background:${catColor(pt.cat)};border-color:${catColor(pt.cat)}"></div>`
+  ).join('');
+}
+
+function updateHUD(pt, stepIdx, subT) {
+  const col = catColor(pt.cat);
+  const cats = ['TD','Cat.1','Cat.2','Cat.3','Cat.4','Cat.5'];
+  const badge = document.getElementById('hud-cat');
+  badge.textContent = cats[Math.min(pt.cat,5)];
+  badge.style.cssText += `background:${col}25;color:${col};border:1px solid ${col}66;`;
+
+  const windEl = document.getElementById('hud-wind');
+  windEl.textContent = Math.round(pt.windSpeed) + ' m/s';
+  windEl.style.color = col;
+
+  const sstEl = document.getElementById('hud-sst');
+  sstEl.textContent = (pt.sstAnom >= 0 ? '+' : '') + pt.sstAnom.toFixed(1) + ' °C';
+  sstEl.style.color = pt.sstAnom >= 0 ? 'var(--hurricane)' : 'var(--anomaly-cold)';
+
+  // Z-Score estimate: linearly scale sstAnom to the known peak Z
+  const zEst = (pt.sstAnom / 4.8 * 4.2).toFixed(1);
+  document.getElementById('hud-z').textContent = (zEst >= 0 ? '+' : '') + zEst + 'σ';
+
+  const dates = ['25 Ago','25 Ago','26 Ago','27 Ago','28 Ago ★','28–29','29 Ago','29 Ago'];
+  document.getElementById('hud-date').textContent = dates[Math.min(stepIdx,7)];
+
+  const total = KATRINA_TRACK.length - 1;
+  const pct = ((stepIdx + subT) / total * 100).toFixed(1);
+  document.getElementById('hud-pbar').style.width = pct + '%';
+  document.getElementById('hud-pdot').style.left  = pct + '%';
+
+  KATRINA_TRACK.forEach((_,i) => {
+    const dot = document.getElementById(`kdot-${i}`);
+    if (!dot) return;
+    dot.classList.toggle('done',   i < stepIdx);
+    dot.classList.toggle('active', i === stepIdx);
+    dot.style.opacity = i > stepIdx ? '0.25' : '1';
+  });
+
+  const desc = document.getElementById('hud-desc');
+  desc.style.opacity = '0';
+  setTimeout(() => { desc.innerHTML = pt.desc; desc.style.opacity = '1'; }, 100);
+}
+
+function drawAnimEye(pt) {
+  animLayer.selectAll('*').remove();
+  const pos = projection([pt.lon, pt.lat]);
+  if (!pos) return;
+  const [x, y] = pos;
+  const col = catColor(pt.cat);
+  const scale = 0.55 + (pt.windSpeed / 78) * 0.9;
+  const r = 18 * scale;
+  const now = performance.now();
+
+  // Wake trail
+  KANIM.wake.forEach((wp, i) => {
+    const wPos = projection([wp.lon, wp.lat]);
+    if (!wPos) return;
+    const age = (KANIM.wake.length - i) / KANIM.wake.length;
+    animLayer.append('circle')
+      .attr('cx', wPos[0]).attr('cy', wPos[1])
+      .attr('r', 4 + (1-age)*10)
+      .attr('fill', wp.col)
+      .attr('opacity', (1-age) * 0.22);
+  });
+
+  // Outer glow
+  const grad = animLayer.append('defs').append('radialGradient').attr('id','eg');
+  grad.append('stop').attr('offset','0%').attr('stop-color',col).attr('stop-opacity',0.35);
+  grad.append('stop').attr('offset','70%').attr('stop-color',col).attr('stop-opacity',0.08);
+  grad.append('stop').attr('offset','100%').attr('stop-color',col).attr('stop-opacity',0);
+  animLayer.append('circle').attr('cx',x).attr('cy',y).attr('r',r*3.8).attr('fill','url(#eg)');
+
+  // Rotating spiral bands
+  const rot = (now / 2200) * 360;
+  [{ r:r*2.1, sw:3, op:0.5 }, { r:r*1.4, sw:2.2, op:0.4 }, { r:r*0.82, sw:1.8, op:0.55 }]
+    .forEach((b, bi) => {
+      const ag = animLayer.append('g').attr('transform',`translate(${x},${y}) rotate(${rot - bi*45})`);
+      for (let a=0; a<3; a++) {
+        const s = a * 2.094, e = s + 1.745;
+        ag.append('path')
+          .attr('d', `M${b.r*Math.cos(s)},${b.r*Math.sin(s)} A${b.r},${b.r} 0 0,1 ${b.r*Math.cos(e)},${b.r*Math.sin(e)}`)
+          .attr('fill','none').attr('stroke',col).attr('stroke-width',b.sw)
+          .attr('stroke-linecap','round')
+          .attr('opacity', b.op * (pt.windSpeed/78));
+      }
+    });
+
+  // Eye wall
+  animLayer.append('circle').attr('cx',x).attr('cy',y).attr('r',r*0.44)
+    .attr('fill','none').attr('stroke',col).attr('stroke-width',3.5*scale).attr('opacity',0.85);
+
+  // Eye center dot
+  animLayer.append('circle').attr('cx',x).attr('cy',y).attr('r',5*scale)
+    .attr('fill',col).attr('opacity',0.95).attr('stroke','#fff').attr('stroke-width',1.5);
+
+  // Expanding pulse ring
+  const pp = (now % 1900) / 1900;
+  animLayer.append('circle').attr('cx',x).attr('cy',y)
+    .attr('r', r*0.44 + pp*r*2.5).attr('fill','none').attr('stroke',col)
+    .attr('stroke-width',1.5).attr('opacity', (1-pp)*0.5);
+
+  // Category label
+  const cats = ['TD','Cat.1','Cat.2','Cat.3','Cat.4','Cat.5'];
+  const lbl = `🌀 ${cats[Math.min(pt.cat,5)]} · ${Math.round(pt.windSpeed)} m/s`;
+  const lw = 105;
+  animLayer.append('rect').attr('x',x-lw/2).attr('y',y-r*3-22).attr('width',lw).attr('height',19)
+    .attr('rx',2).attr('fill','rgba(10,18,28,0.92)').attr('stroke',col).attr('stroke-width',1);
+  animLayer.append('text').attr('x',x).attr('y',y-r*3-9).attr('text-anchor','middle')
+    .attr('font-family','Source Code Pro,monospace').attr('font-size','9px').attr('font-weight','700')
+    .attr('fill',col).text(lbl);
+}
+
+function animTick(now) {
+  if (!KANIM.running) return;
+  const elapsed = now - KANIM.segStart;
+  const rawT = elapsed / KANIM.STEP_MS;
+
+  if (rawT >= 1) {
+    KANIM.stepIdx++;
+    KANIM.segStart = now;
+    if (KANIM.stepIdx >= KATRINA_TRACK.length - 1) { finishKatrinaAnim(); return; }
+  }
+
+  const t = easeInOut(Math.min(rawT, 1));
+  const a = KATRINA_TRACK[KANIM.stepIdx];
+  const b = KATRINA_TRACK[Math.min(KANIM.stepIdx+1, KATRINA_TRACK.length-1)];
+  const pt = lerpTrack(a, b, t);
+
+  // Wake trail every ~200ms
+  if (now - KANIM._lastWake > 200) {
+    KANIM.wake.push({ lon:pt.lon, lat:pt.lat, col:catColor(pt.cat) });
+    if (KANIM.wake.length > 30) KANIM.wake.shift();
+    KANIM._lastWake = now;
+  }
+
+  // Gentle auto-pan to follow the eye
+  const eyeScreen = projection([pt.lon, pt.lat]);
+  if (eyeScreen) {
+    const dx = eyeScreen[0] - W/2, dy = eyeScreen[1] - H/2;
+    if (Math.abs(dx) > 100 || Math.abs(dy) > 80) {
+      const nx = Math.max(-PAN_LIMIT_X, Math.min(PAN_LIMIT_X, panOffset[0] - dx*0.02));
+      const ny = Math.max(-PAN_LIMIT_Y, Math.min(PAN_LIMIT_Y, panOffset[1] - dy*0.02));
+      panOffset = [nx, ny];
+      projection.translate([baseTranslate[0]+panOffset[0], baseTranslate[1]+panOffset[1]]);
+    }
+  }
+
+  drawAnimEye(pt);
+  updateHUD(pt, KANIM.stepIdx, t);
+
+  if (now - KANIM._lastWind > 400) {
+    renderWind(ALL_WIND[7], ALL_GRIDS[7]);
+    KANIM._lastWind = now;
+  }
+
+  KANIM.rafId = requestAnimationFrame(animTick);
+}
+
+function startKatrinaAnim() {
+  if (KANIM.running) return;
+  // Switch to August
+  state.timeStep = 7;
+  document.getElementById('time-slider').value = 7;
+  updateTimeDisplay(7);
+
+  state.katrinaAnimRunning = true;
+  KANIM.running = true; KANIM.stepIdx = 0;
+  KANIM.wake = []; KANIM._lastWake = 0; KANIM._lastWind = 0;
+  KANIM.segStart = performance.now();
+  updateKatrinaPlayButton();
+
+  // Fly to Katrina start
+  const startPos = projection([KATRINA_TRACK[0].lon, KATRINA_TRACK[0].lat]);
+  if (startPos) {
+    const tx = Math.max(-PAN_LIMIT_X, Math.min(PAN_LIMIT_X, panOffset[0] + (W/2 - startPos[0])*0.88));
+    const ty = Math.max(-PAN_LIMIT_Y, Math.min(PAN_LIMIT_Y, panOffset[1] + (H/2 - startPos[1])*0.88));
+    animatePanTo(tx, ty, 700);
+  }
+
+  document.getElementById('anim-hud').classList.add('visible');
+  buildHUDDots();
+
+  const btn = document.getElementById('play-katrina-btn');
+  btn.classList.add('playing'); btn.textContent = '⏸'; btn.title = 'Pausar';
+
+  state.layers.storms = true;
+  document.getElementById('toggle-storms').classList.add('active');
+
+  KANIM.rafId = requestAnimationFrame(animTick);
+}
+
+function pauseKatrinaAnim() {
+  state.katrinaAnimRunning = false;
+  KANIM.running = false;
+  if (KANIM.rafId) cancelAnimationFrame(KANIM.rafId);
+  const btn = document.getElementById('play-katrina-btn');
+  btn.classList.remove('playing'); btn.textContent = '▶'; btn.title = 'Reanudar';
+  updateKatrinaPlayButton();
+}
+
+function finishKatrinaAnim() {
+  state.katrinaAnimRunning = false;
+  KANIM.running = false;
+  if (KANIM.rafId) cancelAnimationFrame(KANIM.rafId);
+  KANIM.stepIdx = 0;
+  KANIM.wake = [];
+
+  document.getElementById('anim-hud').classList.remove('visible');
+  const btn = document.getElementById('play-katrina-btn');
+  btn.classList.remove('playing');
+  btn.textContent = '▶';
+  btn.title = '▶ Animar trayectoria de Katrina';
+
+  animLayer.selectAll('*').remove();
+  resetMapView();
+  render();
+  updateKatrinaPlayButton();
+}
+
+function resetKatrinaAnim() {
+  state.katrinaAnimRunning = false;
+  KANIM.running = false; KANIM.stepIdx = 0; KANIM.wake = [];
+  if (KANIM.rafId) cancelAnimationFrame(KANIM.rafId);
+  animLayer.selectAll('*').remove();
+  document.getElementById('anim-hud').classList.remove('visible');
+  const btn = document.getElementById('play-katrina-btn');
+  btn.classList.remove('playing'); btn.textContent = '▶'; btn.title = '▶ Animar trayectoria de Katrina';
+  render();
+}
+
+function toggleKatrinaAnim() {
+  const btn = document.getElementById('play-katrina-btn');
+  if (btn.disabled && !state.katrinaAnimRunning) return;
+  if (btn.textContent === '↺') { resetKatrinaAnim(); setTimeout(startKatrinaAnim, 80); return; }
+  if (KANIM.running) { pauseKatrinaAnim(); }
+  else if (KANIM.stepIdx > 0) {
+    // Resume
+    state.katrinaAnimRunning = true;
+    KANIM.running = true;
+    KANIM.segStart = performance.now();
+    btn.classList.add('playing'); btn.textContent = '⏸';
+    document.getElementById('anim-hud').classList.add('visible');
+    KANIM.rafId = requestAnimationFrame(animTick);
+  } else {
+    startKatrinaAnim();
+  }
+}
+
 </script>
 </body>
 </html>
