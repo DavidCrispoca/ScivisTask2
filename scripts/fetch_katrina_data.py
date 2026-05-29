@@ -71,8 +71,33 @@ def to_pm180(ds, lon_name="lon"):
     return ds.sortby(lon_name)
 
 
+def normalize_coords(ds):
+    """Unifica nombres lon/lat y elimina dimensiones extra (level, depth)."""
+    renames = {}
+    for c in ds.coords:
+        cl = c.lower()
+        if cl in ("longitude", "x") and c != "lon":
+            renames[c] = "lon"
+        if cl in ("latitude", "y") and c != "lat":
+            renames[c] = "lat"
+    if renames:
+        ds = ds.rename(renames)
+    return ds
+
+
+def squeeze_surface(da):
+    """Queda con un campo 2D (lat, lon) — superficie / primer nivel."""
+    for dim in ("level", "lev", "depth", "deptht", "z"):
+        if dim in da.dims:
+            da = da.isel({dim: 0})
+    if "time" in da.dims and da.sizes.get("time", 1) == 1:
+        da = da.squeeze("time", drop=True)
+    return da
+
+
 def regrid_bilinear(da, lon_target, lat_target, lon_name="lon", lat_name="lat"):
     """Interpola un DataArray 2D (lat,lon) a la grilla (lat_target, lon_target)."""
+    da = squeeze_surface(da)
     out = da.interp({lon_name: lon_target, lat_name: lat_target}, method="linear")
     return out.values
 
@@ -101,7 +126,7 @@ def safe_open(url, **kwargs):
     for engine in (None, "netcdf4", "pydap"):
         try:
             log(f"  Abriendo OPeNDAP ({engine or 'auto'}): {url}")
-            kw = {} if engine is None else {"engine": engine}
+            kw = {"decode_times": True} if engine is None else {"engine": engine, "decode_times": True}
             return xr.open_dataset(url, **kw, **kwargs)
         except Exception as e:
             last_err = e
@@ -114,10 +139,12 @@ def safe_open(url, **kwargs):
 # ────────────────────────────────────────────────────────
 def load_sst_monthly():
     log("Cargando SST mensual (NOAA OISST v2)...")
-    ds = safe_open(URL_SST_MON)
+    ds = normalize_coords(safe_open(URL_SST_MON))
     ds = to_pm180(ds)
     ds = slice_region_asc(ds)
     sst_2005 = ds.sst.sel(time=str(YEAR))
+    if sst_2005.sizes.get("time", 12) != 12:
+        log(f"  AVISO: se esperaban 12 meses, hay {sst_2005.sizes.get('time')}")
     log(f"  SST 2005 dims: {dict(sst_2005.sizes)}")
     return sst_2005
 
@@ -125,7 +152,7 @@ def load_sst_monthly():
 def load_sst_climatology():
     log("Cargando SST climatología 1991-2020 (NOAA OISST v2 LTM)...")
     try:
-        ds = safe_open(URL_SST_LTM)
+        ds = normalize_coords(safe_open(URL_SST_LTM))
         ds = to_pm180(ds)
         ds = slice_region_asc(ds)
         # El archivo LTM tiene 12 meses
@@ -135,7 +162,7 @@ def load_sst_climatology():
         return sst_ltm
     except Exception as e:
         log(f"  LTM no disponible ({e}); usando media 1991-2020 desde mnmean")
-        ds = safe_open(URL_SST_MON)
+        ds = normalize_coords(safe_open(URL_SST_MON))
         ds = to_pm180(ds)
         ds = slice_region_asc(ds)
         sst_all = ds.sst.sel(time=slice("1991-01-01", "2020-12-31"))
@@ -146,10 +173,10 @@ def load_sst_climatology():
 def load_ncep_var(url, varname, year):
     """Carga una variable NCEP/NCAR R1 mensual SOLO para el año pedido (rápido)."""
     log(f"Cargando {varname} (NCEP/NCAR R1) para {year}...")
-    ds = safe_open(url)
+    ds = normalize_coords(safe_open(url))
     ds = to_pm180(ds)
     ds = slice_region(ds, pad=5)
-    da_year = ds[varname].sel(time=str(year))
+    da_year = squeeze_surface(ds[varname].sel(time=str(year)))
     return da_year, None  # no precomputamos climatología NCEP (no se usa)
 
 
@@ -157,7 +184,7 @@ def load_sst_daily_for_katrina():
     """Carga SST diaria de alta resolución (0.25°) para el track Katrina."""
     url = URL_SST_DAY.format(year=YEAR)
     log(f"Cargando SST diaria 0.25° {YEAR} (NOAA OISST v2 high-res)...")
-    ds = safe_open(url)
+    ds = normalize_coords(safe_open(url))
     ds = to_pm180(ds)
     ds = slice_region_asc(ds, pad=4)
     # solo agosto 23-30 alrededor del peak Katrina
@@ -200,12 +227,13 @@ def main():
     for da in (u_2005, v_2005, t_2005, p_2005):
         da.load()
 
-    # 3. SST diaria Katrina
+    # 3. SST diaria Katrina (lazy: solo los 8 puntos del track, sin cargar el año entero)
+    sst_day = None
     try:
-        sst_day = load_sst_daily_for_katrina().load()
+        sst_day = load_sst_daily_for_katrina()
+        log("  SST diaria lista (lectura bajo demanda por punto del track)")
     except Exception as e:
-        log(f"  No pude cargar SST diaria ({e}); track Katrina usará SST mensual")
-        sst_day = None
+        log(f"  No pude abrir SST diaria ({e}); track Katrina usará SST mensual")
 
     # ── Construir 12 meses para el dashboard ──
     months_out = []
@@ -261,27 +289,45 @@ def main():
 
     # ── Extracción SST diaria sobre track Katrina ──
     katrina_real = []
-    if sst_day is not None:
-        for pt in KATRINA_TRACK:
+    for pt in KATRINA_TRACK:
+        v = None
+        if sst_day is not None:
             try:
-                val = sst_day.sel(time=pt["date"]).interp(
-                    lon=pt["lon"], lat=pt["lat"], method="linear"
-                ).values
+                val = (
+                    sst_day.sel(time=pt["date"], method="nearest")
+                    .interp(lon=pt["lon"], lat=pt["lat"], method="linear")
+                    .values
+                )
                 v = float(val) if np.isfinite(val) else None
             except Exception:
                 v = None
-            # climatología para esta lat/lon en agosto (mes 8)
+        # Respaldo: SST mensual de agosto (mes 7) en el punto del track
+        if v is None:
             try:
-                clim_v = float(sst_clim.sel(month=8).interp(lon=pt["lon"], lat=pt["lat"]).values)
+                v = float(
+                    sst_2005.isel(time=7)
+                    .interp(lon=pt["lon"], lat=pt["lat"], method="linear")
+                    .values
+                )
+                if not np.isfinite(v):
+                    v = None
             except Exception:
+                v = None
+        try:
+            clim_v = float(
+                sst_clim.sel(month=8).interp(lon=pt["lon"], lat=pt["lat"], method="linear").values
+            )
+            if not np.isfinite(clim_v):
                 clim_v = None
-            anom = (v - clim_v) if (v is not None and clim_v is not None) else None
-            katrina_real.append({
-                "date": pt["date"], "lon": pt["lon"], "lat": pt["lat"], "cat": pt["cat"],
-                "sst": round(v, 2) if v is not None else None,
-                "sst_clim": round(clim_v, 2) if clim_v is not None else None,
-                "anom": round(anom, 2) if anom is not None else None,
-            })
+        except Exception:
+            clim_v = None
+        anom = (v - clim_v) if (v is not None and clim_v is not None) else None
+        katrina_real.append({
+            "date": pt["date"], "lon": pt["lon"], "lat": pt["lat"], "cat": pt["cat"],
+            "sst": round(v, 2) if v is not None else None,
+            "sst_clim": round(clim_v, 2) if clim_v is not None else None,
+            "anom": round(anom, 2) if anom is not None else None,
+        })
 
     # ── Serie temporal del punto central (40°N, -40°O) para chart ──
     timeseries = []
@@ -364,8 +410,10 @@ def main():
     OUT.write_text(json_str, encoding="utf-8")
     sz_mb = OUT.stat().st_size / 1024 / 1024
     log(f"OK — {OUT.name} ({sz_mb:.2f} MB)")
-    log(f"Resumen: {len(months_out)} meses, SST global mean {g_mean:.2f}°C "
-        f"(σ={g_std:.2f}), {len(katrina_real)} puntos track Katrina con datos reales.")
+    log(
+        f"Resumen: {len(months_out)} meses, SST global mean {g_mean:.2f} C "
+        f"(std={g_std:.2f}), {len(katrina_real)} puntos track Katrina con datos reales."
+    )
 
 
 if __name__ == "__main__":

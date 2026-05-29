@@ -1,0 +1,27 @@
+{
+  "version": "2.0.0",
+  "tasks": [
+    {
+      "label": "SciVis: fetch Katrina data (NOAA)",
+      "type": "shell",
+      "command": "python scripts/fetch_katrina_data.py",
+      "options": { "cwd": "${workspaceFolder}" },
+      "problemMatcher": []
+    },
+    {
+      "label": "SciVis: serve dashboard",
+      "type": "shell",
+      "command": "python serve.py",
+      "options": { "cwd": "${workspaceFolder}" },
+      "isBackground": true,
+      "problemMatcher": {
+        "pattern": { "regexp": "^$" },
+        "background": {
+          "activeOnStart": true,
+          "beginsPattern": "\\[serve\\]",
+          "endsPattern": "\\[serve\\] http://"
+        }
+      }
+    }
+  ]
+}

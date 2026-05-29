@@ -521,7 +521,7 @@
     <h1>Task 2 — <span>Coupled Atmosphere–Ocean</span></h1>
   </div>
   <div class="header-right">
-    <span><span class="status-dot"></span>Live sim</span>
+    <span id="hdr-live"><span class="status-dot"></span><span id="hdr-live-label">Live sim</span></span>
     <span>NASA Dyamond · North Atlantic</span>
     <span id="hdr-date">Agosto 2005 · Nivel 1</span>
   </div>
@@ -1303,7 +1303,7 @@ function renderSST(grid) {
   const dLat = (REGION.lat1 - REGION.lat0) / ny;
 
   if (state.layers.sst) {
-    sstLayer.selectAll('.sst-cell').data(grid.data).join('path')
+    sstLayer.selectAll('.sst-cell').data(grid.data.filter(d => Number.isFinite(accessor(d)))).join('path')
       .attr('class','sst-cell')
       .attr('d', d => {
         const pts = [[d.lon,d.lat],[d.lon+dLon,d.lat],[d.lon+dLon,d.lat+dLat],[d.lon,d.lat+dLat]]
@@ -1513,9 +1513,10 @@ function renderStorms(t) {
       .on('mouseover', function(event) {
         const fakeD = {
           lat: pt.lat, lon: pt.lon,
-          sst: baseSST(pt.lat, pt.lon, 7) + pt.sstAnom,
-          anom: pt.sstAnom, zScore: katrina.zScore * (pt.sstAnom / 4.8),
-          mean: baseSST(pt.lat, pt.lon, 7)
+          sst: pt.realSST != null ? pt.realSST : (baseSST(pt.lat, pt.lon, 7) + pt.sstAnom),
+          anom: pt.sstAnom,
+          zScore: katrina.zScore * (pt.sstAnom / (REAL_EVENTS[0].sstAnom || 4.8)),
+          mean: pt.realSST != null ? (pt.realSST - pt.sstAnom) : baseSST(pt.lat, pt.lon, 7)
         };
         showTrackPointTooltip(event, pt, fakeD);
       })
@@ -2079,25 +2080,40 @@ function applyRealData(payload) {
   }
 
   // ── Reemplazar ALL_GRIDS con datos reales ──
-  const realGrids = payload.months.map(m => {
-    // Pre-cálculo de stats por mes para Z-score local
-    const sstVals = m.sst.filter(v => v !== null);
-    const std = d3.deviation(sstVals) || 1;
+  const rawReal = payload.months.map(m => {
     const data = m.sst.map((sst, idx) => {
       const { lon, lat } = cellLatLon(idx, nx, ny);
       const anom = m.anom[idx];
       const mean = m.sst_clim[idx];
-      const zScore = (sst !== null && std > 0) ? (anom || 0) / std : 0;
       return {
         lon, lat,
-        sst: sst === null ? NaN : sst,
-        anom: anom === null ? 0 : anom,
-        mean: mean === null ? 0 : mean,
-        zScore
+        sst: (sst === null || !Number.isFinite(sst)) ? NaN : sst,
+        anom: (anom === null || !Number.isFinite(anom)) ? 0 : anom,
+        mean: (mean === null || !Number.isFinite(mean)) ? 0 : mean
       };
     });
     return { data, nx, ny };
   });
+
+  // Z-score por celda: desviación de los 12 meses (igual que buildPhysicalData)
+  const nCells = rawReal[0].data.length;
+  const means = d3.range(nCells).map(idx =>
+    d3.mean(rawReal, g => Number.isFinite(g.data[idx].sst) ? g.data[idx].sst : null)
+  );
+  const stdev = d3.range(nCells).map(idx =>
+    d3.deviation(rawReal.map(g => g.data[idx].sst).filter(Number.isFinite))
+  );
+
+  const realGrids = rawReal.map(g => ({
+    data: g.data.map((d, idx) => ({
+      ...d,
+      zScore: (stdev[idx] > 0 && Number.isFinite(d.sst))
+        ? (d.sst - means[idx]) / stdev[idx]
+        : 0
+    })),
+    nx: g.nx,
+    ny: g.ny
+  }));
 
   // ── Reemplazar ALL_WIND con datos reales ──
   // El JSON usa grilla wnx x wny para vientos; T_air y P sobre nx x ny.
@@ -2163,64 +2179,90 @@ function applyRealData(payload) {
 // ═══════════════════════════════════════════════════════
 //  INIT
 // ═══════════════════════════════════════════════════════
+function finishDashboardInit(realLoaded, meta) {
+  buildMonthTicks();
+  computeEventZScores();
+  buildTimeSeriesChart();
+  buildAnomalyChart();
+  buildMinimap();
+  loadMainMapCoastlines();
+  updateTimeStep(state.timeStep);
+
+  const hdr = document.querySelector('.header-right');
+  if (hdr) {
+    const badge = document.createElement('span');
+    if (realLoaded) {
+      badge.style.cssText = 'padding:2px 8px;font-size:9px;font-weight:600;background:var(--success);color:#0d1e30;border-radius:2px;font-family:Source Code Pro,monospace;cursor:help;margin-right:10px;';
+      badge.textContent = '✓ Datos reales NOAA';
+      badge.title = (meta && meta.sources)
+        ? Object.values(meta.sources).join(' · ')
+        : 'NOAA OISST v2 + NCEP/NCAR R1 — Atlántico Norte 2005';
+      const liveLbl = document.getElementById('hdr-live-label');
+      if (liveLbl) liveLbl.textContent = ' NOAA OISST 2005';
+    } else {
+      badge.style.cssText = 'padding:2px 8px;font-size:9px;font-weight:600;background:var(--warn);color:#0d1e30;border-radius:2px;font-family:Source Code Pro,monospace;cursor:help;margin-right:10px;';
+      badge.textContent = '⚠ Vista sintética';
+      badge.title = 'Genera data/dyamond_task2.json con: python scripts/fetch_katrina_data.py — sirve con: python serve.py';
+    }
+    hdr.prepend(badge);
+  }
+
+  if (window.location.protocol === 'file:') {
+    console.warn(
+      '[SciVis Task 2] Abriste el HTML como archivo local (file://). ' +
+      'fetch() no puede cargar data/dyamond_task2.json. Ejecuta: python serve.py ' +
+      'y abre http://127.0.0.1:8000/index.html'
+    );
+  }
+}
+
+function loadMainMapCoastlines() {
+  fetch('https://cdn.jsdelivr.net/npm/world-atlas@2/countries-110m.json')
+    .then(r => r.ok ? r.json() : null)
+    .then(world => {
+      if (!world) return;
+      const countries = topojson.feature(world, world.objects.countries);
+      geoLayer.insert('path', ':first-child')
+        .datum(countries)
+        .attr('class', 'countries')
+        .attr('d', path);
+      geoLayer.select('.graticule').raise();
+    })
+    .catch(() => {});
+}
+
 (async () => {
-  // 1. Datos sintéticos como red de seguridad (siempre funciona)
   buildPhysicalData();
-
   let realLoaded = false;
+  let meta = null;
 
-  // 2. Intentar cargar JSON real generado por fetch_katrina_data.py
   try {
-    const resp = await fetch('data/dyamond_task2.json');
-    if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
+    const resp = await fetch('data/dyamond_task2.json', { cache: 'no-store' });
+    if (!resp.ok) throw new Error(`HTTP ${resp.status} — ¿ejecutaste fetch_katrina_data.py?`);
 
-    // Leer como texto primero para detectar NaN/Infinity residuales
-    // que json.dumps de Python puede haber escrito (aunque el .py corregido ya no debería)
     let rawText = await resp.text();
-
-    // Sanitizar por si acaso: reemplazar tokens NaN/Infinity no citados → null
     rawText = rawText.replace(/:\s*NaN\b/g, ': null')
                      .replace(/:\s*Infinity\b/g, ': null')
                      .replace(/:\s*-Infinity\b/g, ': null');
 
     const payload = JSON.parse(rawText);
 
-    // Validación mínima de estructura
-    if (!payload.months || !Array.isArray(payload.months) || payload.months.length !== 12) {
-      throw new Error('JSON cargado pero estructura months inválida');
+    if (!payload.months || payload.months.length !== 12) {
+      throw new Error('JSON: se esperaban 12 meses en months[]');
     }
     if (!payload.months[0].sst || !Array.isArray(payload.months[0].sst)) {
-      throw new Error('JSON cargado pero months[0].sst no es un array');
+      throw new Error('JSON: months[0].sst inválido');
     }
 
-    // ── Usar applyRealData() que convierte el JSON al formato interno ──
-    const meta = applyRealData(payload);
-
+    meta = applyRealData(payload);
     realLoaded = true;
-    console.log('[SciVis Task 2] ✓ Datos reales NOAA/NASA cargados.', meta.title || '');
+    console.log('[SciVis Task 2] Datos reales cargados.', meta.title || '', meta.note || '');
 
-  } catch(e) {
-    console.warn('[SciVis Task 2] No se pudieron cargar datos reales, usando fallback sintético.', e.message);
+  } catch (e) {
+    console.warn('[SciVis Task 2] Fallback sintético:', e.message);
   }
 
-  // 3. Badge de estado en el header
-  const hdr = document.querySelector('.header-right');
-  if (hdr) {
-    const badge = document.createElement('span');
-    if (realLoaded) {
-      badge.style.cssText = 'padding:2px 8px;font-size:9px;font-weight:600;background:var(--success);color:#0d1e30;border-radius:2px;font-family:Source Code Pro,monospace;cursor:help;margin-right:10px;';
-      badge.textContent = '✓ Datos reales NOAA/NASA';
-      badge.title = 'NOAA OISST v2 + NCEP/NCAR R1 — Atlántico Norte 2005';
-    } else {
-      badge.style.cssText = 'padding:2px 8px;font-size:9px;font-weight:600;background:var(--warn);color:#0d1e30;border-radius:2px;font-family:Source Code Pro,monospace;cursor:help;margin-right:10px;';
-      badge.textContent = '⚠ Sintético calibrado 2005';
-      badge.title = 'Ejecuta fetch_katrina_data.py para generar data/dyamond_task2.json';
-    }
-    hdr.prepend(badge);
-  }
-
-  // 4. Render inicial
-  updateTimeStep(state.timeStep);
+  finishDashboardInit(realLoaded, meta);
 })();
 </script>
 </body>
